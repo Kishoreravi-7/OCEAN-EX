@@ -1,0 +1,3941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>OCEANEX — Ocean Exploration Simulator</title>
+<style>
+  :root{
+    --cyan:#3ee6ff; --cyan-dim:#2a8fa3; --teal:#0ee6b7; --bg:#020810;
+    --glass:rgba(8,20,30,0.55); --glass-brd:rgba(62,230,255,0.28);
+    --warn:#ffb23e; --danger:#ff5566; --text:#d8f6ff; --text-dim:#7fa9b8;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{width:100%; height:100%; overflow:hidden; background:var(--bg); font-family:'Segoe UI',system-ui,-apple-system,sans-serif; color:var(--text);}
+  #app{position:fixed; inset:0;}
+  canvas{display:block; touch-action:none;}
+
+  /* ---------- Loading ---------- */
+  #loader{position:fixed; inset:0; background:radial-gradient(ellipse at center,#031423 0%,#000308 100%); z-index:999; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px;}
+  #loader .ring{width:64px; height:64px; border-radius:50%; border:2px solid rgba(62,230,255,0.15); border-top-color:var(--cyan); animation:spin 1s linear infinite;}
+  #loader .lt{letter-spacing:6px; font-size:13px; color:var(--cyan-dim); text-transform:uppercase;}
+  #loader .logo{font-size:34px; font-weight:200; letter-spacing:10px; color:var(--cyan); text-shadow:0 0 24px rgba(62,230,255,0.6);}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  #loader .bar{width:260px; height:2px; background:rgba(62,230,255,0.12); position:relative; overflow:hidden; border-radius:2px;}
+  #loader .bar i{position:absolute; left:0; top:0; bottom:0; width:0%; background:linear-gradient(90deg,var(--teal),var(--cyan)); transition:width .2s;}
+
+  /* ---------- Glass panel base ---------- */
+  .glass{background:var(--glass); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); border:1px solid var(--glass-brd); border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.04);}
+
+  /* ---------- Top bar ---------- */
+  #topbar{position:fixed; top:0; left:0; right:0; height:56px; display:flex; align-items:center; padding:0 24px; z-index:1050; pointer-events:none;}
+  #brand{pointer-events:auto; display:flex; align-items:center; gap:10px; font-weight:600; letter-spacing:4px; font-size:15px; color:var(--cyan); text-shadow:0 0 16px rgba(62,230,255,0.5); cursor:pointer;}
+  #brand .dot{width:8px; height:8px; border-radius:50%; background:var(--teal); box-shadow:0 0 10px var(--teal); animation:pulse 2s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+  #modebar{position:fixed; top:8px; left:50%; transform:translateX(-50%); pointer-events:auto; display:flex; gap:6px; padding:5px 8px; z-index:1060;}
+  .mbtn{background:transparent; border:1px solid transparent; color:var(--text-dim); font-size:11px; letter-spacing:1.5px; padding:8px 14px; border-radius:8px; cursor:pointer; transition:.2s; font-family:inherit; text-transform:uppercase; white-space:nowrap;}
+  .mbtn:hover{color:var(--cyan); border-color:rgba(62,230,255,0.25);}
+  .mbtn.active{color:#00202a; background:linear-gradient(135deg,var(--cyan),var(--teal)); box-shadow:0 0 18px rgba(62,230,255,0.5); border-color:transparent;}
+  #statusline{pointer-events:auto; font-size:10px; letter-spacing:2px; color:var(--text-dim); text-transform:uppercase;}
+
+  /* ---------- HUD (underwater) ---------- */
+  #hud{position:fixed; left:16px; bottom:16px; z-index:40; padding:14px 18px; min-width:210px; display:none; font-variant-numeric:tabular-nums;}
+  #hud.show{display:block;}
+  #hud h4{font-size:10px; letter-spacing:3px; color:var(--cyan-dim); margin-bottom:10px; text-transform:uppercase;}
+  .hud-row{display:flex; justify-content:space-between; font-size:12px; padding:3px 0; border-bottom:1px solid rgba(62,230,255,0.08);}
+  .hud-row span:first-child{color:var(--text-dim); letter-spacing:1px;}
+  .hud-row span:last-child{color:var(--cyan); font-weight:600;}
+  .hud-row.warn span:last-child{color:var(--warn);}
+
+  #depthbar-wrap{position:fixed; right:16px; top:70px; bottom:180px; width:46px; z-index:40; display:none; flex-direction:column; align-items:center;}
+  #depthbar-wrap.show{display:flex;}
+  #depthbar-track{position:relative; flex:1; width:4px; background:rgba(62,230,255,0.15); border-radius:2px; margin:8px 0;}
+  #depthbar-fill{position:absolute; top:0; left:0; width:100%; background:linear-gradient(180deg,var(--cyan),#062033); border-radius:2px; transition:height .1s linear;}
+  #depthbar-marker{position:absolute; left:-9px; width:22px; height:2px; background:var(--teal); box-shadow:0 0 8px var(--teal);}
+  #depthbar-label{font-size:10px; color:var(--cyan); letter-spacing:1px;}
+
+  /* ---------- Compact ROV controls ---------- */
+  #rovpad{position:fixed; right:16px; bottom:16px; z-index:40; display:none; grid-template-columns:repeat(3,42px); grid-template-rows:repeat(3,42px); gap:4px;}
+  #rovpad.show{display:grid;}
+  #rovpad button{background:var(--glass); border:1px solid var(--glass-brd); border-radius:8px; color:var(--cyan); font-size:14px; cursor:pointer; user-select:none;}
+  #rovpad button:active{background:rgba(62,230,255,0.35);}
+  #vertpad{position:fixed; right:172px; bottom:16px; z-index:40; display:none; flex-direction:column; gap:4px;}
+  #vertpad.show{display:flex;}
+  #vertpad button{width:42px; height:42px; background:var(--glass); border:1px solid var(--glass-brd); border-radius:8px; color:var(--teal); font-size:13px; cursor:pointer;}
+
+  /* ---------- Bottom-center hint ---------- */
+  #hint{position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:40; font-size:11px; letter-spacing:2px; color:var(--text-dim); text-transform:uppercase; padding:8px 16px; opacity:0; transition:opacity .5s;}
+  #hint.show{opacity:1;}
+
+  /* ---------- Ocean marker labels (globe) ---------- */
+  .globe-label{position:absolute; pointer-events:auto; transform:translate(-50%,-50%); cursor:pointer; z-index:30;}
+  .globe-label .ring{width:16px; height:16px; border-radius:50%; border:2px solid var(--cyan); box-shadow:0 0 14px rgba(62,230,255,0.8); position:relative;}
+  .globe-label .ring::after{content:''; position:absolute; inset:-6px; border:1px solid rgba(62,230,255,0.4); border-radius:50%; animation:ringpulse 2.4s ease-out infinite;}
+  @keyframes ringpulse{0%{transform:scale(0.6);opacity:1;}100%{transform:scale(2.2);opacity:0;}}
+  .globe-label .txt{position:absolute; top:20px; left:50%; transform:translateX(-50%); font-size:10px; letter-spacing:2px; white-space:nowrap; color:var(--cyan); text-shadow:0 0 8px rgba(0,0,0,0.9); text-transform:uppercase; font-weight:600;}
+  .globe-label.loc .ring{width:10px; height:10px; border-color:var(--teal); box-shadow:0 0 10px rgba(14,230,183,0.8);}
+  .globe-label.loc .txt{color:var(--teal); font-size:9px; top:14px;}
+  .globe-label.creature .ring{width:8px;height:8px;border-color:#fff;box-shadow:0 0 8px #fff;}
+
+  /* ---------- Side panels (glass, floating, collapsible) ---------- */
+  .panel{position:fixed; z-index:45; width:300px; max-height:70vh; overflow:auto; padding:16px; display:none; flex-direction:column; gap:10px;}
+  .panel.show{display:flex;}
+  .panel h3{font-size:12px; letter-spacing:3px; color:var(--cyan); text-transform:uppercase; display:flex; justify-content:space-between; align-items:center;}
+  .panel h3 .x{cursor:pointer; color:var(--text-dim); font-size:16px; line-height:1;}
+  .panel .sub{font-size:10px; color:var(--text-dim); letter-spacing:1px; margin-top:-6px;}
+  .panel::-webkit-scrollbar{width:5px;} .panel::-webkit-scrollbar-thumb{background:rgba(62,230,255,0.3); border-radius:4px;}
+
+  #locpanel{top:70px; right:16px;}
+  #divebtn{margin-top:6px; background:linear-gradient(135deg,var(--teal),var(--cyan)); border:none; color:#001a22; font-weight:700; letter-spacing:2px; padding:12px; border-radius:8px; cursor:pointer; font-size:12px; text-transform:uppercase;}
+  #divebtn:hover{filter:brightness(1.15);}
+  .locrow{display:flex; justify-content:space-between; font-size:11px; padding:4px 0; color:var(--text-dim);}
+  .locrow b{color:var(--text); font-weight:500;}
+
+  #creaturepanel{top:70px; right:16px;}
+  #creaturepanel img{display:none;}
+  .tag{display:inline-block; font-size:9px; letter-spacing:1px; padding:2px 8px; border-radius:20px; background:rgba(62,230,255,0.15); color:var(--cyan); text-transform:uppercase; width:fit-content;}
+  .tag.demo{background:rgba(255,178,62,0.15); color:var(--warn);}
+
+  #currentpanel{top:110px; left:16px;}
+  .slider-row{display:flex; flex-direction:column; gap:4px; font-size:11px;}
+  .slider-row label{color:var(--text-dim); letter-spacing:1px; display:flex; justify-content:space-between;}
+  input[type=range]{width:100%; accent-color:var(--cyan);}
+  .toggle-btn{background:rgba(62,230,255,0.08); border:1px solid var(--glass-brd); color:var(--cyan); padding:8px; border-radius:8px; cursor:pointer; font-size:11px; letter-spacing:1px; text-transform:uppercase;}
+  .toggle-btn.on{background:linear-gradient(135deg,var(--teal),var(--cyan)); color:#001a22; font-weight:700;}
+
+  #analyzepanel{top:110px; left:16px; width:340px;}
+  .datagrid{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .dcell{background:rgba(62,230,255,0.06); border:1px solid rgba(62,230,255,0.15); border-radius:8px; padding:8px 10px;}
+  .dcell .l{font-size:9px; color:var(--text-dim); letter-spacing:1px; text-transform:uppercase;}
+  .dcell .v{font-size:16px; color:var(--cyan); font-weight:600; margin-top:2px;}
+  .dcell .v small{font-size:10px; color:var(--text-dim);}
+  #depthgraph{width:100%; height:180px; border-radius:8px; background:rgba(0,10,16,0.5); cursor:crosshair;}
+
+  #timepanel{top:110px; left:16px;}
+  #yearlabel{font-size:26px; color:var(--cyan); font-weight:200; letter-spacing:2px; text-align:center;}
+
+  #aipanel{bottom:16px; right:16px; left:auto; transform:none; width:330px; max-height:46vh; z-index:1150;}
+  #ailog{flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px; max-height:220px; padding-right:4px;}
+  .msg{font-size:12px; padding:8px 12px; border-radius:10px; max-width:88%; line-height:1.45;}
+  .msg.user{align-self:flex-end; background:rgba(62,230,255,0.18); color:var(--text);}
+  .msg.ai{align-self:flex-start; background:rgba(14,230,183,0.1); color:var(--text); border:1px solid rgba(14,230,183,0.2);}
+  #aiinputrow{display:flex; gap:6px;}
+  #aiinput{flex:1; background:rgba(0,0,0,0.3); border:1px solid var(--glass-brd); border-radius:8px; color:var(--text); padding:9px 12px; font-size:12px; font-family:inherit;}
+  #aiinput:focus{outline:none; border-color:var(--cyan);}
+  #aisend{background:var(--cyan); border:none; border-radius:8px; padding:0 16px; cursor:pointer; color:#001a22; font-weight:700;}
+  .aisug{font-size:10px; color:var(--cyan-dim); cursor:pointer; padding:3px 0; letter-spacing:.5px;}
+  .aisug:hover{color:var(--cyan);}
+
+  #summarypanel{top:50%; left:50%; transform:translate(-50%,-50%); width:400px;}
+  #summarypanel h2{font-size:16px; letter-spacing:3px; color:var(--cyan); text-transform:uppercase; margin-bottom:4px;}
+
+  #resetbtn{position:fixed; top:64px; left:16px; z-index:45; display:none; background:var(--glass); border:1px solid var(--glass-brd); color:var(--cyan); font-size:10px; letter-spacing:2px; padding:8px 14px; border-radius:8px; cursor:pointer; text-transform:uppercase;}
+  #resetbtn.show{display:block;}
+
+  #backtoearthbtn{position:fixed; top:64px; left:16px; z-index:45; display:none; background:linear-gradient(135deg,rgba(62,230,255,0.18),rgba(14,230,183,0.1)); border:1px solid var(--glass-brd); color:var(--cyan); font-size:10px; letter-spacing:2px; padding:8px 14px; border-radius:8px; cursor:pointer; text-transform:uppercase;}
+  #backtoearthbtn.show{display:block;}
+
+  #divecontrolpanel{top:110px; left:16px; width:260px;}
+  .depthinput-row{display:flex; gap:6px; align-items:center;}
+  #targetdepthinput{flex:1; background:rgba(0,0,0,0.3); border:1px solid var(--glass-brd); border-radius:8px; color:var(--text); padding:9px 10px; font-size:13px; font-family:inherit;}
+  #targetdepthinput:focus{outline:none; border-color:var(--cyan);}
+  #enterdepthbtn{background:var(--cyan); border:none; border-radius:8px; padding:0 14px; cursor:pointer; color:#001a22; font-weight:700; font-size:11px;}
+  .depthbtn-row{display:flex; gap:6px;}
+  .depthbtn-row button{flex:1; background:rgba(62,230,255,0.08); border:1px solid var(--glass-brd); color:var(--cyan); padding:8px; border-radius:8px; cursor:pointer; font-size:10px; letter-spacing:1px; text-transform:uppercase;}
+  .depthbtn-row button:hover{background:rgba(62,230,255,0.2);}
+  .quickdepths{display:flex; flex-wrap:wrap; gap:5px;}
+  .quickdepths button{background:rgba(255,255,255,0.04); border:1px solid rgba(62,230,255,0.15); color:var(--text-dim); padding:5px 9px; border-radius:6px; cursor:pointer; font-size:10px;}
+  .quickdepths button:hover{color:var(--cyan); border-color:var(--cyan);}
+
+  #timepanel .depthinput-row{margin-top:4px;}
+  #traveltimebtn{width:100%; margin-top:6px; background:linear-gradient(135deg,var(--teal),var(--cyan)); border:none; color:#001a22; font-weight:700; letter-spacing:2px; padding:11px; border-radius:8px; cursor:pointer; font-size:11px; text-transform:uppercase;}
+
+  #crosshair{position:fixed; top:50%; left:50%; width:5px; height:5px; border-radius:50%; background:rgba(62,230,255,0.5); transform:translate(-50%,-50%); z-index:35; display:none; box-shadow:0 0 6px rgba(62,230,255,0.8);}
+  #crosshair.show{display:block;}
+
+  #whiteflash{display:none !important;}
+
+  ::selection{background:rgba(62,230,255,0.3);}
+
+  /* ---------- AI icon (persistent, separate floating button, top-right) ---------- */
+  #aiicon{position:fixed; top:10px; right:20px; z-index:1100; width:38px; height:38px; border-radius:50%;
+    background:linear-gradient(135deg,var(--teal),var(--cyan)); border:none; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; font-size:14px; color:#001a22; font-weight:800; letter-spacing:1px;
+    box-shadow:0 0 18px rgba(62,230,255,0.6); pointer-events:auto; transition:transform .2s, filter .2s;}
+  #aiicon:hover{filter:brightness(1.15); transform:scale(1.06);}
+
+  /* ---------- Waves screen — 3D hydrodynamic ocean visualization ---------- */
+  #wavesscreen{position:fixed; inset:0; z-index:1000; display:none; overflow:hidden; background:transparent; pointer-events:none;}
+  #wavesscreen.show{display:block;}
+  #wavesbar{position:absolute; top:0; left:0; right:0; height:64px; display:flex; align-items:center; justify-content:space-between; padding:0 22px; z-index:2; pointer-events:none;}
+  .wavesbrand{display:flex; align-items:center; gap:10px; font-weight:600; letter-spacing:4px; font-size:15px; color:var(--cyan); text-shadow:0 0 16px rgba(62,230,255,.65);}
+  .wavesbrand .dot{width:8px; height:8px; border-radius:50%; background:var(--teal); box-shadow:0 0 10px var(--teal); animation:pulse 2s ease-in-out infinite;}
+  #wavesbackbtn{pointer-events:auto; background:rgba(2,8,16,.65); border:1px solid rgba(62,230,255,.45); color:var(--cyan); font-size:10px; letter-spacing:2px; padding:9px 15px; border-radius:8px; cursor:pointer; text-transform:uppercase; backdrop-filter:blur(10px);}
+  #wavesbackbtn:hover{background:rgba(62,230,255,.25);}
+  #wavesloc{position:absolute; left:22px; bottom:22px; z-index:2; padding:9px 14px; border:1px solid rgba(62,230,255,.3); border-radius:8px; background:rgba(2,8,16,.65); backdrop-filter:blur(10px); font-size:11px; color:var(--text-dim); letter-spacing:1px; pointer-events:auto;}
+  #wavesloc b{color:var(--cyan); font-weight:600;}
+
+  /* Waves data dashboard (Scrollable & fully responsive) */
+  #wavesdatapanel{position:absolute; right:22px; top:74px; bottom:22px; width:350px; max-height:calc(100vh - 96px); z-index:10; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:8px; padding:16px; pointer-events:auto; -webkit-overflow-scrolling:touch; scrollbar-width:thin; scrollbar-color:rgba(62,230,255,0.4) rgba(2,8,16,0.5);}
+  #wavesdatapanel h3{font-size:12px; letter-spacing:2px; color:var(--cyan); text-transform:uppercase; margin-bottom:2px;}
+  .waves-sec-title{font-size:10px; letter-spacing:2px; color:var(--teal); text-transform:uppercase; margin-top:8px; border-bottom:1px solid rgba(62,230,255,0.18); padding-bottom:3px; font-weight:700;}
+  #wavesdatapanel::-webkit-scrollbar{width:6px;}
+  #wavesdatapanel::-webkit-scrollbar-track{background:rgba(2,8,16,0.3); border-radius:4px;}
+  #wavesdatapanel::-webkit-scrollbar-thumb{background:rgba(62,230,255,0.35); border-radius:4px;}
+  #wavesdatapanel::-webkit-scrollbar-thumb:hover{background:rgba(62,230,255,0.6);}
+
+  /* ---------- Storm markers on globe + storm panel ---------- */
+  .globe-label.storm .ring{width:8px; height:8px; border:2px solid var(--danger); background:rgba(255,85,102,0.45); box-shadow:0 0 12px rgba(255,85,102,0.95);}
+  .globe-label.storm .ring::after{border-color:rgba(255,85,102,0.5);}
+  .globe-label.storm .txt{display:none;}
+  #stormpanel{top:70px; right:16px; width:320px;}
+  .safety-pill{display:inline-block; font-size:9px; letter-spacing:1px; padding:3px 9px; border-radius:12px; font-weight:700; text-transform:uppercase; margin:4px 0 8px; width:fit-content;}
+  .safety-pill.SAFE{background:rgba(14,230,183,0.15); color:var(--teal); border:1px solid var(--teal);}
+  .safety-pill.CAUTION{background:rgba(255,178,62,0.18); color:var(--warn); border:1px solid var(--warn);}
+  .safety-pill.HIGH_RISK{background:rgba(255,85,102,0.22); color:var(--danger); border:1px solid var(--danger);}
+  .safety-pill.DANGEROUS{background:rgba(255,40,60,0.3); color:#ff3050; border:1px solid #ff3050; box-shadow:0 0 10px rgba(255,40,60,0.4);}
+  #explorestormbtn{margin-top:6px; background:linear-gradient(135deg,var(--danger),#ff9d3e); border:none; color:#1a0002; font-weight:700; letter-spacing:2px; padding:12px; border-radius:8px; cursor:pointer; font-size:11px; text-transform:uppercase;}
+  #stormpanel .storm-name{font-size:15px;color:var(--danger);font-weight:700;margin-bottom:2px;}
+  #stormpanel .storm-type{font-size:10px;color:var(--text-dim);letter-spacing:1px;margin-bottom:4px;}
+
+  /* Surface cinematic FX disabled in favor of real Three.js 3D ocean scene */
+  #surfaceCinematicFX{display:none !important;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<canvas id="surfaceCinematicFX" aria-hidden="true"></canvas>
+
+<div id="loader">
+  <div class="logo">OCEAN<span style="color:#0ee6b7">EX</span></div>
+  <div class="ring"></div>
+  <div class="lt" id="loadmsg">initializing planet</div>
+  <div class="bar"><i id="loadbar"></i></div>
+</div>
+
+<div id="whiteflash"></div>
+
+<div id="topbar">
+  <div id="brand"><span class="dot"></span>OCEAN<span style="color:#0ee6b7">EX</span></div>
+  <div id="modebar" class="glass"></div>
+</div>
+
+<button id="aiicon" title="OceanEx AI Assistant">AI</button>
+
+<button id="resetbtn">⟲ RESET TO GLOBAL VIEW</button>
+<button id="backtoearthbtn">← BACK TO EARTH</button>
+
+<div id="crosshair"></div>
+<div id="hint" class="glass"></div>
+
+<!-- Location select panel (globe mode) -->
+<div id="locpanel" class="panel glass">
+  <h3>LOCATION <span class="x" data-close="locpanel">✕</span></h3>
+  <div id="locbody"></div>
+</div>
+
+<!-- Storm details panel (globe mode) -->
+<div id="stormpanel" class="panel glass">
+  <h3>STORM DETAILS <span class="x" data-close="stormpanel">✕</span></h3>
+  <div id="stormbody"></div>
+</div>
+
+<!-- Dive control / depth dashboard -->
+<div id="divecontrolpanel" class="panel glass">
+  <h3>DIVE CONTROL <span class="x" data-close="divecontrolpanel">✕</span></h3>
+  <div class="sub">Target depth — DPV moves smoothly, never teleports</div>
+  <div class="depthinput-row">
+    <input type="number" id="targetdepthinput" min="0" max="3000" step="10" placeholder="e.g. 800">
+    <button id="enterdepthbtn">ENTER</button>
+  </div>
+  <div class="depthbtn-row">
+    <button id="descendbtn">▼ DESCEND</button>
+    <button id="ascendbtn">▲ ASCEND</button>
+  </div>
+  <div class="quickdepths">
+    <button data-d="100">100m</button><button data-d="300">300m</button>
+    <button data-d="800">800m</button><button data-d="1500">1500m</button>
+    <button data-d="3000">3000m</button><button data-d="0">Surface</button>
+  </div>
+  <div class="datagrid" style="margin-top:4px;">
+    <div class="dcell"><div class="l">Current Depth</div><div class="v" id="dc-curdepth">0<small> m</small></div></div>
+    <div class="dcell"><div class="l">Target Depth</div><div class="v" id="dc-targetdepth">—</div></div>
+  </div>
+</div>
+
+<!-- Creature info panel -->
+<div id="creaturepanel" class="panel glass">
+  <h3>MARINE LIFE <span class="x" data-close="creaturepanel">✕</span></h3>
+  <div id="creaturebody"></div>
+</div>
+
+<!-- Current panel -->
+<div id="currentpanel" class="panel glass">
+  <h3>OCEAN CURRENT <span class="x" data-close="currentpanel">✕</span></h3>
+  <div class="sub">Real-time flow visualization</div>
+  <button class="toggle-btn" id="currenttoggle">Activate Current</button>
+  <div class="slider-row"><label>Speed <span id="curspeedval">0.4 kn</span></label><input type="range" id="curspeed" min="0" max="2" step="0.05" value="0.4"></div>
+  <div class="slider-row"><label>Direction <span id="curdirval">90°</span></label><input type="range" id="curdir" min="0" max="359" step="1" value="90"></div>
+  <div class="datagrid" style="margin-top:6px;">
+    <div class="dcell"><div class="l">Speed</div><div class="v" id="dccurspeed">0.4<small> kn</small></div></div>
+    <div class="dcell"><div class="l">Direction</div><div class="v" id="dccurdir">E</div></div>
+    <div class="dcell"><div class="l">Depth</div><div class="v" id="dccurdepth">0<small> m</small></div></div>
+    <div class="dcell"><div class="l">Status</div><div class="v" id="dccurstatus">Calm</div></div>
+  </div>
+</div>
+
+<!-- Analyze / scientific data panel -->
+<div id="analyzepanel" class="panel glass">
+  <h3>OCEAN DATA <span class="x" data-close="analyzepanel">✕</span></h3>
+  <div class="sub" id="analyzesrc">Source: <span class="tag demo">DEMO DATA</span></div>
+  <div class="datagrid">
+    <div class="dcell"><div class="l">Temperature</div><div class="v" id="d-temp">--<small>°C</small></div></div>
+    <div class="dcell"><div class="l">Salinity</div><div class="v" id="d-sal">--<small> PSU</small></div></div>
+    <div class="dcell"><div class="l">Dissolved O₂</div><div class="v" id="d-oxy">--<small> mg/L</small></div></div>
+    <div class="dcell"><div class="l">Pressure</div><div class="v" id="d-pres">--<small> atm</small></div></div>
+    <div class="dcell"><div class="l">Current Speed</div><div class="v" id="d-cur">--<small> kn</small></div></div>
+    <div class="dcell"><div class="l">Chlorophyll</div><div class="v" id="d-chl">--<small> mg/m³</small></div></div>
+  </div>
+  <div class="sub" style="margin-top:6px;">Depth Profile — click graph to set DPV depth</div>
+  <canvas id="depthgraph" width="308" height="180"></canvas>
+</div>
+
+<!-- Time explorer panel -->
+<div id="timepanel" class="panel glass">
+  <h3>TIME MACHINE <span class="x" data-close="timepanel">✕</span></h3>
+  <div class="sub">Cinematic time travel — simulated historical dataset</div>
+  <div id="yearlabel">2026</div>
+  <input type="range" id="yearslider" min="2018" max="2026" step="1" value="2026">
+  <button class="toggle-btn" id="comparebtn">Compare With Present</button>
+  <div id="comparebody" class="sub" style="display:none;"></div>
+  <button id="traveltimebtn">⧗ TRAVEL THROUGH TIME</button>
+  <div class="sub" id="timetravelnote" style="display:none;">SIMULATED HISTORICAL DATA</div>
+</div>
+
+<!-- AI Assistant panel -->
+<div id="aipanel" class="panel glass">
+  <h3>OCEANEX AI <span class="x" data-close="aipanel">✕</span></h3>
+  <div class="sub">Context-aware assistant · simulated reasoning over live dive data</div>
+  <div id="ailog"></div>
+  <div id="aisuggestions"></div>
+  <div id="aiinputrow">
+    <input id="aiinput" placeholder="Ask about depth, temperature, marine life…">
+    <button id="aisend">➤</button>
+  </div>
+</div>
+
+<!-- Dive summary -->
+<div id="summarypanel" class="panel glass">
+  <h3>DIVE SUMMARY <span class="x" data-close="summarypanel">✕</span></h3>
+  <div id="summarybody"></div>
+</div>
+
+<div id="hud" class="glass">
+  <h4>DPV TELEMETRY</h4>
+  <div class="hud-row"><span>DEPTH</span><span id="hv-depth">0 m</span></div>
+  <div class="hud-row"><span>TARGET</span><span id="hv-target">—</span></div>
+  <div class="hud-row"><span>ALTITUDE</span><span id="hv-alt">-- m</span></div>
+  <div class="hud-row"><span>HEADING</span><span id="hv-heading">000°</span></div>
+  <div class="hud-row"><span>SPEED</span><span id="hv-speed">0.0 kn</span></div>
+  <div class="hud-row"><span>STATE</span><span id="hv-state">CRUISING</span></div>
+  <div class="hud-row"><span>TEMP</span><span id="hv-temp">-- °C</span></div>
+  <div class="hud-row"><span>SALINITY</span><span id="hv-sal">-- PSU</span></div>
+  <div class="hud-row"><span>OXYGEN</span><span id="hv-oxy">-- mg/L</span></div>
+  <div class="hud-row"><span>PRESSURE</span><span id="hv-pres">-- atm</span></div>
+  <div class="hud-row"><span>CURRENT</span><span id="hv-current">off</span></div>
+</div>
+
+<div id="depthbar-wrap">
+  <div id="depthbar-label">0m</div>
+  <div id="depthbar-track"><div id="depthbar-fill"></div><div id="depthbar-marker"></div></div>
+  <div id="depthbar-label">3000m</div>
+</div>
+
+<div id="rovpad">
+  <!-- Row 1: Q (ascend) | W (forward) | E (descend) -->
+  <button data-k="KeyQ" title="Ascend (Q)">⤒</button><button data-k="KeyW" title="Forward (W)">▲</button><button data-k="KeyE" title="Descend (E)">⤓</button>
+  <!-- Row 2: A (move/turn left) | blank | D (move/turn right) -->
+  <button data-k="KeyA" title="Left (A)">◀</button><div></div><button data-k="KeyD" title="Right (D)">▶</button>
+  <!-- Row 3: blank | S (backward) | blank -->
+  <div></div><button data-k="KeyS" title="Backward (S)">▼</button><div></div>
+</div>
+<div id="vertpad">
+  <button data-k="KeyQ" title="Ascend (Q / Space)">⤒</button>
+  <button data-k="KeyE" title="Descend (E / Shift)">⤓</button>
+</div>
+
+<div id="globelabels"></div>
+
+<!-- WAVES SCREEN — 3D Hydrodynamic Ocean Surface Visualization -->
+<div id="wavesscreen">
+  <div id="wavesbar">
+    <div></div>
+    <button id="wavesbackbtn">← BACK / HOME</button>
+  </div>
+  <div id="wavesloc">Location: <b id="wavesloc-name">—</b> · <span id="wavesloc-coords"></span></div>
+  <div id="wavesdatapanel" class="glass">
+    <h3>MARINE CONDITIONS</h3>
+    <div class="sub" style="font-size:10px;color:var(--text-dim);margin-bottom:4px;">High-Resolution Hydrodynamic Model · Simulated Data</div>
+    
+    <div class="waves-sec-title">WAVE METRICS</div>
+    <div class="locrow"><span>Significant Wave Height</span><b id="w-sig">—</b></div>
+    <div class="locrow"><span>Maximum Wave Height</span><b id="w-max">—</b></div>
+    <div class="locrow"><span>Wave Period</span><b id="w-period">—</b></div>
+    <div class="locrow"><span>Wave Direction</span><b id="w-dir">—</b></div>
+    <div class="locrow"><span>Wave Speed</span><b id="w-speed">—</b></div>
+    <div class="locrow"><span>Wave Energy</span><b id="w-energy">—</b></div>
+    <div class="locrow"><span>Wave Condition</span><b id="w-cond" style="color:var(--cyan);font-weight:700;">—</b></div>
+
+    <div class="waves-sec-title">WIND OBSERVATIONS</div>
+    <div class="locrow"><span>Wind Speed</span><b id="w-windspd">—</b></div>
+    <div class="locrow"><span>Wind Direction</span><b id="w-winddir">—</b></div>
+    <div class="locrow"><span>Wind Gust</span><b id="w-windgust">—</b></div>
+
+    <div class="waves-sec-title">METEOROLOGY</div>
+    <div class="locrow"><span>Sea Surface Temp</span><b id="w-temp">—</b></div>
+    <div class="locrow"><span>Precipitation Rate</span><b id="w-rain">—</b></div>
+    <div class="locrow"><span>Relative Humidity</span><b id="w-hum">—</b></div>
+    <div class="locrow"><span>Atmospheric Visibility</span><b id="w-vis">—</b></div>
+    <div class="locrow"><span>Atmospheric Condition</span><b id="w-weathercond">—</b></div>
+
+    <div class="waves-sec-title">SEVERE WEATHER MONITORING</div>
+    <div class="locrow"><span>Storm Status</span><b id="w-stormstat">—</b></div>
+    <div class="locrow"><span>Tornado Risk</span><b id="w-tornado">—</b></div>
+    <div class="locrow"><span>Storm Category</span><b id="w-stormcat">—</b></div>
+    <div class="locrow"><span>Storm Intensity</span><b id="w-stormint">—</b></div>
+    <div class="locrow"><span>Track & Movement</span><b id="w-movement">—</b></div>
+    <div class="locrow"><span>Marine Safety Level</span><b id="w-safety" style="font-weight:700;">—</b></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="GLTFLoader.js"></script>
+<script>
+/* ===================================================================
+   OCEANEX — Ocean Exploration Simulator
+   Vanilla Three.js r128 implementation. Single continuous 3D world:
+   Space -> Earth -> Ocean surface -> Underwater -> ROV exploration.
+=================================================================== */
+(function(){
+'use strict';
+
+/* ---------------------------------------------------------------
+   0. GLOBAL STATE
+--------------------------------------------------------------- */
+const EARTH_R = 200;               // earth radius, world units
+const M2U = 0.12;                  // meters -> local-ocean units scale
+const MAX_DEPTH_M = 3000;
+
+const STATE = {
+  mode: 'space',                   // space | diving | ocean | underwater
+  ocean: null,                     // selected ocean id
+  location: null,                  // selected location object
+  depthM: 0,                       // current simulated depth (meters)
+  time: { year: 2026 },
+  current: { active:false, speed:0.4, dirDeg:90 },
+  selectedCreature: null,
+  rov: {
+    pos: new THREE.Vector3(0,-6,0),
+    heading: 0,                    // radians
+    speed: 0,
+    vel: new THREE.Vector3(),
+    targetDepth: null,
+    angVel: 0,                     // yaw angular velocity, rad/s (turn inertia)
+    braking: false,                // true while autopilot is decelerating into a target depth
+    moveState: 'CRUISING',         // CRUISING | FAST | DESCENDING | ASCENDING | BRAKING
+  },
+  keys: {},
+  diveT: 0,
+  diveStage: 0,
+  lightsOn: true,
+};
+
+const OCEANS = {
+  pacific:  { name:'Pacific Ocean',  lat: 5,   lon: -150, locs:[
+    {name:'Hawaiian Ridge', lat:21, lon:-157, depth:'0–5,000m', data:'Temp, Salinity, Currents'},
+    {name:'Mariana Trench', lat:11, lon:142,  depth:'0–10,900m', data:'Temp, Pressure, Bathymetry'},
+    {name:'Great Barrier Reef', lat:-18, lon:147, depth:'0–150m', data:'Temp, Chlorophyll, Reef Health'},
+  ]},
+  atlantic: { name:'Atlantic Ocean', lat: 12,  lon: -35,  locs:[
+    {name:'Mid-Atlantic Ridge', lat:0, lon:-25, depth:'0–4,000m', data:'Temp, Salinity, Seismic'},
+    {name:'Sargasso Sea', lat:28, lon:-65, depth:'0–2,000m', data:'Temp, Salinity, Currents'},
+    {name:'Gulf Stream', lat:35, lon:-70, depth:'0–800m', data:'Current Speed, Temp'},
+  ]},
+  indian:   { name:'Indian Ocean',   lat: -8,  lon: 78,   locs:[
+    {name:'India — Arabian Sea', lat:15, lon:68, depth:'0–3,000m', data:'Temp, Salinity, O₂, Currents'},
+    {name:'Sri Lanka Coast', lat:6, lon:82, depth:'0–2,500m', data:'Temp, Chlorophyll, Currents'},
+    {name:'Maldives Atolls', lat:3, lon:73, depth:'0–2,000m', data:'Temp, Reef Health, Salinity'},
+    {name:'East Africa — Zanzibar', lat:-6, lon:40, depth:'0–2,800m', data:'Temp, Salinity, O₂'},
+    {name:'Arabian Peninsula — Gulf of Oman', lat:15, lon:57, depth:'0–3,200m', data:'Temp, Salinity, Currents'},
+    {name:'Andaman Sea — SE Asia', lat:8, lon:96, depth:'0–3,000m', data:'Temp, O₂, Chlorophyll'},
+    {name:'NW Australia Shelf', lat:-20, lon:115, depth:'0–2,600m', data:'Temp, Salinity, Currents'},
+  ]},
+  southern: { name:'Southern Ocean', lat: -58, lon: 20,    locs:[
+    {name:'Antarctic Shelf', lat:-66, lon:10, depth:'0–4,500m', data:'Temp, Salinity, Ice Data'},
+    {name:'Drake Passage', lat:-60, lon:-65, depth:'0–3,400m', data:'Currents, Temp'},
+  ]},
+  arctic:   { name:'Arctic Ocean',   lat: 82,  lon: 0,    locs:[
+    {name:'Arctic Basin', lat:87, lon:0, depth:'0–4,000m', data:'Temp, Salinity, Ice Coverage'},
+    {name:'Beaufort Sea', lat:75, lon:-140, depth:'0–3,000m', data:'Temp, Salinity, Currents'},
+  ]},
+};
+
+/* ---------------------------------------------------------------
+   1. RENDERER / SCENE / CAMERA
+--------------------------------------------------------------- */
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance', alpha:false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x020810, 1.0);
+// Use outputColorSpace if available (Three.js r152+), fall back to outputEncoding
+if('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
+else renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.9;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = null;
+scene.fog = new THREE.FogExp2(0x02384a, 0); // Initialize with 0 density for space mode
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.05, 20000);
+camera.position.set(0, 60, 520);
+camera.lookAt(0, 0, 0);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+controls.minDistance = 260;
+controls.maxDistance = 1400;
+controls.rotateSpeed = 0.45;
+controls.zoomSpeed = 0.7;
+controls.enablePan = false;
+controls.target.set(0, 0, 0);
+
+window.addEventListener('resize', ()=>{
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+/* ---------------------------------------------------------------
+   2. LIGHTING
+--------------------------------------------------------------- */
+const sun = new THREE.DirectionalLight(0xffffff, 1.35);
+sun.position.set(600, 250, 400);
+scene.add(sun);
+const ambient = new THREE.AmbientLight(0x0e1c2e, 0.28);
+scene.add(ambient);
+const SUN_DIR_WORLD = sun.position.clone().normalize();
+
+/* ---------------------------------------------------------------
+   3. STARFIELD (Space mode only — strictly hidden in underwater/ocean modes)
+--------------------------------------------------------------- */
+const starGroup = new THREE.Group();
+scene.add(starGroup);
+
+(function buildStars(){
+  const N = 6000;
+  const g = new THREE.BufferGeometry();
+  const pos = new Float32Array(N*3);
+  for(let i=0;i<N;i++){
+    const r = 4000 + Math.random()*6000;
+    const th = Math.random()*Math.PI*2, ph = Math.acos(2*Math.random()-1);
+    pos[i*3]   = r*Math.sin(ph)*Math.cos(th);
+    pos[i*3+1] = r*Math.cos(ph);
+    pos[i*3+2] = r*Math.sin(ph)*Math.sin(th);
+  }
+  g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  const m = new THREE.PointsMaterial({ color:0xbfe3ff, size:2.2, sizeAttenuation:false, transparent:true, opacity:0.85, fog:false });
+  starGroup.add(new THREE.Points(g,m));
+})();
+
+/* ---------------------------------------------------------------
+   4. EARTH GROUP (realistic globe)
+--------------------------------------------------------------- */
+const earthGroup = new THREE.Group();
+scene.add(earthGroup);
+
+const loadMsg = document.getElementById('loadmsg');
+const loadBar = document.getElementById('loadbar');
+const texLoader = new THREE.TextureLoader();
+let texLoaded = 0; const texTotal = 5;
+function bumpLoad(label){
+  texLoaded++;
+  if(loadBar) loadBar.style.width = Math.round((texLoaded/texTotal)*100)+'%';
+  if(label && loadMsg) loadMsg.textContent = label;
+}
+
+// Procedural instant textures to guarantee Earth is never black on fresh load/refresh
+function createProceduralEarthTexture(){
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 512;
+  const ctx = c.getContext('2d');
+  
+  // Rich, deep dark-blue ocean gradient
+  const grad = ctx.createLinearGradient(0, 0, 0, 512);
+  grad.addColorStop(0, '#020b18');
+  grad.addColorStop(0.18, '#04162e');
+  grad.addColorStop(0.5, '#07244a');
+  grad.addColorStop(0.82, '#04162e');
+  grad.addColorStop(1, '#020b18');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 1024, 512);
+
+  // Stylized continents in realistic dark earthy greens & browns
+  ctx.fillStyle = '#1c3d28';
+  // North America
+  ctx.beginPath(); ctx.ellipse(280, 160, 95, 60, -0.2, 0, Math.PI*2); ctx.fill();
+  // Central America
+  ctx.beginPath(); ctx.ellipse(310, 230, 20, 30, 0.4, 0, Math.PI*2); ctx.fill();
+  // South America
+  ctx.beginPath(); ctx.ellipse(340, 330, 55, 90, 0.3, 0, Math.PI*2); ctx.fill();
+  // Eurasia
+  ctx.beginPath(); ctx.ellipse(650, 160, 140, 70, 0.1, 0, Math.PI*2); ctx.fill();
+  // Africa
+  ctx.beginPath(); ctx.ellipse(550, 280, 70, 90, 0, 0, Math.PI*2); ctx.fill();
+  // Australia
+  ctx.beginPath(); ctx.ellipse(820, 350, 50, 40, -0.2, 0, Math.PI*2); ctx.fill();
+  // Greenland
+  ctx.beginPath(); ctx.ellipse(380, 85, 35, 25, 0.2, 0, Math.PI*2); ctx.fill();
+
+  // Coastal shallows highlighting
+  ctx.strokeStyle = '#0e4a7a';
+  ctx.lineWidth = 4;
+  ctx.stroke();
+
+  // Crisp polar ice caps
+  ctx.fillStyle = '#e8f4fc';
+  ctx.fillRect(0, 0, 1024, 22);
+  ctx.fillRect(0, 490, 1024, 22);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.encoding = THREE.sRGBEncoding;
+  return tex;
+}
+
+function createProceduralCloudTexture(){
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 512, 256);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+  for(let i=0; i<45; i++){
+    const x = Math.random()*512, y = 35 + Math.random()*186, r = 16 + Math.random()*35;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  return tex;
+}
+
+const EARTH_DAY_HI = 'https://threejs.org/examples/textures/planets/earth_atmos_4096.jpg';
+const EARTH_DAY_FALLBACK = 'https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg';
+const EARTH_CLOUDS = 'https://threejs.org/examples/textures/planets/earth_clouds_2048.png';
+const EARTH_SPEC = 'https://threejs.org/examples/textures/planets/earth_specular_2048.jpg';
+const EARTH_NORMAL = 'https://threejs.org/examples/textures/planets/earth_normal_2048.jpg';
+const EARTH_LIGHTS = 'https://threejs.org/examples/textures/planets/earth_lights_2048.png';
+
+let earthMesh, cloudMesh, atmoMesh, nightMesh;
+
+const fallbackEarthTex = createProceduralEarthTexture();
+const fallbackCloudTex = createProceduralCloudTexture();
+
+const earthMat = new THREE.MeshPhongMaterial({
+  map: fallbackEarthTex,
+  color: 0xffffff,
+  specular: new THREE.Color(0x0e2a44),
+  shininess: 25,
+  fog: false,
+});
+earthMesh = new THREE.Mesh(new THREE.SphereGeometry(EARTH_R, 128, 128), earthMat);
+earthMesh.rotation.y = Math.PI;
+earthGroup.add(earthMesh);
+
+const cloudMat = new THREE.MeshLambertMaterial({ map:fallbackCloudTex, transparent:true, opacity:0.20, depthWrite:false, fog:false });
+cloudMesh = new THREE.Mesh(new THREE.SphereGeometry(EARTH_R*1.012, 96, 96), cloudMat);
+cloudMesh.rotation.y = Math.PI;
+earthGroup.add(cloudMesh);
+
+// Load high resolution textures asynchronously and update materials upon arrival
+texLoader.load(EARTH_DAY_HI, (tex)=>{
+  tex.encoding = THREE.sRGBEncoding;
+  earthMat.map = tex;
+  earthMat.needsUpdate = true;
+  bumpLoad('loading terrain relief');
+}, undefined, ()=>{
+  texLoader.load(EARTH_DAY_FALLBACK, (tex)=>{
+    tex.encoding = THREE.sRGBEncoding;
+    earthMat.map = tex;
+    earthMat.needsUpdate = true;
+    bumpLoad('loading terrain relief');
+  }, undefined, ()=>bumpLoad());
+});
+
+texLoader.load(EARTH_SPEC, (tex)=>{
+  earthMat.specularMap = tex;
+  earthMat.needsUpdate = true;
+  bumpLoad('loading ocean specular');
+}, undefined, ()=>bumpLoad());
+
+texLoader.load(EARTH_NORMAL, (tex)=>{
+  earthMat.normalMap = tex;
+  earthMat.normalScale = new THREE.Vector2(0.85, 0.85);
+  earthMat.needsUpdate = true;
+  bumpLoad('loading city lights');
+}, undefined, ()=>bumpLoad());
+
+// city-light night side — visibly blended in only on the side facing away from the sun
+const nightTex = texLoader.load(EARTH_LIGHTS, ()=>bumpLoad('finalizing atmosphere'), undefined, ()=>bumpLoad());
+nightTex.encoding = THREE.sRGBEncoding;
+const nightMat = new THREE.ShaderMaterial({
+  uniforms: { nightMap:{ value:nightTex }, sunDir:{ value:SUN_DIR_WORLD } },
+  vertexShader:`
+    varying vec2 vUv; varying vec3 vWorldNormal;
+    void main(){
+      vUv = uv;
+      vWorldNormal = normalize(mat3(modelMatrix) * normal);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+    }`,
+  fragmentShader:`
+    uniform sampler2D nightMap; uniform vec3 sunDir;
+    varying vec2 vUv; varying vec3 vWorldNormal;
+    void main(){
+      float ndl = dot(normalize(vWorldNormal), normalize(sunDir));
+      float night = smoothstep(0.12,-0.25,ndl);
+      vec3 col = texture2D(nightMap, vUv).rgb;
+      gl_FragColor = vec4(col*night*1.6, night*(col.r+col.g+col.b)*0.65);
+    }`,
+  transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, fog:false,
+});
+nightMesh = new THREE.Mesh(new THREE.SphereGeometry(EARTH_R*1.002, 96, 96), nightMat);
+nightMesh.rotation.y = Math.PI;
+earthGroup.add(nightMesh);
+
+texLoader.load(EARTH_CLOUDS, (tex)=>{
+  cloudMat.map = tex;
+  cloudMat.needsUpdate = true;
+  bumpLoad('atmosphere ready');
+  finishLoad();
+}, undefined, ()=>{
+  bumpLoad();
+  finishLoad();
+});
+
+// Atmosphere glow shell (fresnel rim shader - subtle halo on grazing edge)
+const atmoMat = new THREE.ShaderMaterial({
+  uniforms: { glowColor:{ value:new THREE.Color(0x4fc3ff) } },
+  vertexShader:`
+    varying float vIntensity;
+    void main(){
+      vec3 vNormal = normalize(normalMatrix * normal);
+      vIntensity = pow(1.0 - max(0.0, dot(vNormal, vec3(0.0, 0.0, 1.0))), 3.5);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+    }`,
+  fragmentShader:`
+    uniform vec3 glowColor;
+    varying float vIntensity;
+    void main(){
+      gl_FragColor = vec4(glowColor, clamp(vIntensity * 0.75, 0.0, 0.8));
+    }`,
+  side: THREE.BackSide, blending: THREE.AdditiveBlending, transparent:true, depthWrite:false
+});
+atmoMesh = new THREE.Mesh(new THREE.SphereGeometry(EARTH_R*1.06, 96,96), atmoMat);
+earthGroup.add(atmoMesh);
+
+function finishLoad(){
+  setTimeout(()=>{
+    document.getElementById('loader').style.opacity=0;
+    document.getElementById('loader').style.transition='opacity .6s';
+    setTimeout(()=>document.getElementById('loader').style.display='none', 650);
+    buildOceanLabels();
+    buildStormLabels();
+    showHint('drag to rotate earth · scroll to zoom · click a marker to explore an ocean');
+  }, 300);
+}
+// fallback in case a texture errors out silently
+setTimeout(()=>{ if(document.getElementById('loader').style.display!=='none') finishLoad(); }, 6000);
+
+function latLonToVec3(lat, lon, radius){
+  // The Earth texture/meshes are rotated by PI around Y. Apply the same
+  // geographic alignment to every projected ocean, location and storm marker
+  // so coordinates land on the real-world map shown by the globe.
+  const phi = (90-lat) * Math.PI/180;
+  const theta = lon * Math.PI/180;
+  return new THREE.Vector3(
+    -radius*Math.sin(phi)*Math.cos(theta),
+    radius*Math.cos(phi),
+    radius*Math.sin(phi)*Math.sin(theta)
+  );
+}
+
+/* ---------------------------------------------------------------
+   5. DOM LABELS FOR OCEAN / LOCATION MARKERS (screen-projected)
+--------------------------------------------------------------- */
+const labelRoot = document.getElementById('globelabels');
+let oceanLabelEls = {};
+let locLabelEls = [];
+let stormLabelEls = [];
+
+function clearStormLabels(){
+  stormLabelEls.forEach(s=>s.el.remove());
+  stormLabelEls = [];
+}
+
+function buildStormLabels(){
+  clearStormLabels();
+  STORMS.forEach(storm=>{
+    const el = document.createElement('div');
+    el.className = 'globe-label storm';
+    el.innerHTML = `<div class="ring"></div><div class="txt">${storm.name}</div>`;
+    el.title = `${storm.name} — click for storm details`;
+    el.addEventListener('click', e=>{ e.stopPropagation(); showStormDetails(storm); });
+    labelRoot.appendChild(el);
+    stormLabelEls.push({ el, pos: latLonToVec3(storm.latitude, storm.longitude, EARTH_R*1.018), storm });
+  });
+}
+
+function showStormDetails(storm){
+  STATE.location = {
+    name: storm.name, lat: storm.latitude, lon: storm.longitude,
+    depth: 'Surface / storm system', data: 'Storm, waves, wind, weather'
+  };
+  const body = document.getElementById('stormbody');
+  body.innerHTML = `
+    <div class="storm-name">${storm.name}</div>
+    <div class="storm-type">${storm.type}</div>
+    <div class="safety-pill ${storm.safetyLevel.replace(' ','_')}">${storm.safetyLevel}</div>
+    <div class="locrow"><span>Wind Speed</span><b>${storm.windSpeed} km/h</b></div>
+    <div class="locrow"><span>Wave Speed</span><b>${(storm.movementSpeed * 1.852).toFixed(1)} km/h</b></div>
+    <div class="locrow"><span>Wave Height</span><b>${storm.waveHeight.toFixed(1)} m</b></div>
+    <div class="locrow"><span>Storm Status</span><b style="color:var(--danger);font-weight:700;">${storm.safetyLevel}</b></div>
+    <div class="locrow"><span>Location</span><b>${storm.latitude.toFixed(1)}°, ${storm.longitude.toFixed(1)}°</b></div>
+    <div class="locrow"><span>Pressure</span><b>${storm.pressure} hPa</b></div>
+    <button id="explorestormbtn">EXPLORE STORM WAVES</button>
+  `;
+  document.querySelectorAll('.mbtn').forEach(x=>x.classList.remove('active'));
+  ['locpanel', 'stormpanel', 'divecontrolpanel', 'creaturepanel', 'currentpanel', 'analyzepanel', 'timepanel', 'aipanel'].forEach(closePanel);
+  openPanel('stormpanel');
+  document.getElementById('explorestormbtn').addEventListener('click', ()=>{
+    openWavesScreen(storm.latitude, storm.longitude, storm.name);
+  });
+}
+
+function buildOceanLabels(){
+  Object.keys(OCEANS).forEach(id=>{
+    const o = OCEANS[id];
+    const el = document.createElement('div');
+    el.className = 'globe-label';
+    el.innerHTML = `<div class="ring"></div><div class="txt">${o.name}</div>`;
+    el.addEventListener('click', ()=> selectOcean(id));
+    labelRoot.appendChild(el);
+    oceanLabelEls[id] = { el, pos: latLonToVec3(o.lat, o.lon, EARTH_R*1.01) };
+  });
+}
+
+function clearLocLabels(){
+  locLabelEls.forEach(l=>l.el.remove());
+  locLabelEls = [];
+}
+
+function buildLocLabels(oceanId){
+  clearLocLabels();
+  const o = OCEANS[oceanId];
+  o.locs.forEach(loc=>{
+    const el = document.createElement('div');
+    el.className = 'globe-label loc';
+    el.innerHTML = `<div class="ring"></div><div class="txt">${loc.name}</div>`;
+    el.addEventListener('click', (e)=>{ e.stopPropagation(); selectLocation(loc); });
+    labelRoot.appendChild(el);
+    locLabelEls.push({ el, pos: latLonToVec3(loc.lat, loc.lon, EARTH_R*1.012), loc });
+  });
+}
+
+const _v = new THREE.Vector3();
+function projectLabel(entry, group){
+  _v.copy(entry.pos);
+  group.localToWorld(_v.clone());
+  const world = entry.pos.clone().applyMatrix4(earthGroup.matrixWorld);
+  _v.copy(world).project(camera);
+  const visible = _v.z < 1 && isFrontFacing(world);
+  entry.el.style.display = visible ? 'block' : 'none';
+  if(visible){
+    const x = (_v.x*0.5+0.5)*window.innerWidth;
+    const y = (-_v.y*0.5+0.5)*window.innerHeight;
+    entry.el.style.left = x+'px';
+    entry.el.style.top = y+'px';
+  }
+}
+function isFrontFacing(worldPos){
+  const camDir = camera.position.clone().sub(worldPos).normalize();
+  const surfNormal = worldPos.clone().sub(earthGroup.position).normalize();
+  return camDir.dot(surfNormal) > -0.08;
+}
+
+/* ---------------------------------------------------------------
+   6. CAMERA TWEEN HELPER
+--------------------------------------------------------------- */
+function tweenCam(toPos, toTarget, dur, ease, onDone){
+  const fromPos = camera.position.clone();
+  const fromTarget = controls.target.clone();
+  const t0 = performance.now();
+  controls.enabled = false;
+  function step(){
+    const t = Math.min(1, (performance.now()-t0)/dur);
+    const e = ease ? ease(t) : t;
+    camera.position.lerpVectors(fromPos, toPos, e);
+    controls.target.lerpVectors(fromTarget, toTarget, e);
+    controls.update();
+    if(t<1) requestAnimationFrame(step);
+    else { controls.enabled = true; if(onDone) onDone(); }
+  }
+  step();
+}
+function easeInOutCubic(t){ return t<0.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2; }
+
+/* ---------------------------------------------------------------
+   7. OCEAN SELECTION
+--------------------------------------------------------------- */
+function selectOcean(id){
+  if(STATE.mode!=='space') return;
+  STATE.ocean = id;
+  const o = OCEANS[id];
+  const surfacePos = latLonToVec3(o.lat, o.lon, EARTH_R);
+  const camTarget = surfacePos.clone().normalize().multiplyScalar(EARTH_R * 2.3);
+  document.getElementById('resetbtn').classList.add('show');
+  closePanel('locpanel');
+  closePanel('stormpanel');
+  tweenCam(camTarget, new THREE.Vector3(0, 0, 0), 2200, easeInOutCubic, ()=>{
+    buildLocLabels(id);
+    showHint(`${o.name} selected — click a location marker to view dive data`);
+  });
+}
+
+document.getElementById('resetbtn').addEventListener('click', ()=>{
+  if(STATE.mode!=='space') return;
+  STATE.ocean = null; clearLocLabels();
+  closePanel('locpanel');
+  closePanel('stormpanel');
+  document.getElementById('resetbtn').classList.remove('show');
+  tweenCam(new THREE.Vector3(0,60,520), new THREE.Vector3(0,0,0), 1800, easeInOutCubic, ()=>{
+    showHint('drag to rotate earth · scroll to zoom · click a marker to explore an ocean');
+  });
+});
+
+function updateGlobeOnlyUI(){
+  const isGlobe = STATE.mode==='space';
+  document.getElementById('modebar').style.display = isGlobe ? 'none' : '';
+  if(isGlobe){
+    ['divecontrolpanel','creaturepanel','currentpanel','analyzepanel','timepanel','aipanel','stormpanel'].forEach(closePanel);
+  }
+}
+
+/* ---------------------------------------------------------------
+   8. LOCATION SELECTION -> INFO PANEL
+--------------------------------------------------------------- */
+function selectLocation(loc){
+  STATE.location = loc;
+  closePanel('stormpanel');
+  const body = document.getElementById('locbody');
+  body.innerHTML = `
+    <div style="font-size:15px;color:#3ee6ff;font-weight:600;margin-bottom:6px;">${loc.name}</div>
+    <div class="locrow"><span>Latitude</span><b>${loc.lat.toFixed(2)}°</b></div>
+    <div class="locrow"><span>Longitude</span><b>${loc.lon.toFixed(2)}°</b></div>
+    <div class="locrow"><span>Depth Range</span><b>${loc.depth}</b></div>
+    <div class="locrow"><span>Data Available</span><b style="text-align:right">${loc.data}</b></div>
+    <div class="locrow"><span>Source</span><b><span class="tag demo">DEMO DATA</span></b></div>
+    <button id="divebtn">▶ START DIVE</button>
+  `;
+  openPanel('locpanel');
+  document.getElementById('divebtn').onclick = startDive;
+}
+
+/* ---------------------------------------------------------------
+   9. TEXTURE HELPERS (procedural canvas sprites — no external files)
+--------------------------------------------------------------- */
+function softDotTexture(){
+  const c = document.createElement('canvas'); c.width=c.height=64;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(32,32,0,32,32,32);
+  g.addColorStop(0,'rgba(255,255,255,0.95)');
+  g.addColorStop(0.4,'rgba(200,240,255,0.5)');
+  g.addColorStop(1,'rgba(200,240,255,0)');
+  ctx.fillStyle=g; ctx.fillRect(0,0,64,64);
+  return new THREE.CanvasTexture(c);
+}
+function rayTexture(){
+  const c = document.createElement('canvas'); c.width=64; c.height=256;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0,0,0,256);
+  g.addColorStop(0,'rgba(180,230,255,0.55)');
+  g.addColorStop(1,'rgba(180,230,255,0)');
+  ctx.fillStyle=g;
+  ctx.beginPath(); ctx.moveTo(28,0); ctx.lineTo(36,0); ctx.lineTo(56,256); ctx.lineTo(8,256); ctx.closePath(); ctx.fill();
+  return new THREE.CanvasTexture(c);
+}
+function marineSnowTexture(){
+  const c = document.createElement('canvas'); c.width=64; c.height=64;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(32,32,0,32,32,28);
+  g.addColorStop(0, 'rgba(215, 238, 248, 0.75)');
+  g.addColorStop(0.35, 'rgba(180, 215, 232, 0.35)');
+  g.addColorStop(0.75, 'rgba(130, 180, 205, 0.08)');
+  g.addColorStop(1, 'rgba(130, 180, 205, 0)');
+  ctx.fillStyle = g; ctx.fillRect(0,0,64,64);
+  return new THREE.CanvasTexture(c);
+}
+const dotTex = softDotTexture();
+const snowTex = marineSnowTexture();
+const rayTex = rayTexture();
+
+/* ---------------------------------------------------------------
+   10. OCEAN SURFACE — cinematic sunset ocean
+   NOTE: Everything in this section is parented to oceanGroup, so
+   the visual changes apply only to the ocean-surface scene.
+--------------------------------------------------------------- */
+const oceanGroup = new THREE.Group(); oceanGroup.visible = false; scene.add(oceanGroup);
+
+
+/* ---------------------------------------------------------------
+   Surface cinematic 2D atmosphere — only visible while oceanGroup
+   is visible. This guarantees a clear sunset/sun/cloud composition
+   while the Three.js water remains the animated foreground.
+--------------------------------------------------------------- */
+const surfaceFX = document.getElementById('surfaceCinematicFX');
+const surfaceFXCtx = surfaceFX.getContext('2d');
+let surfaceFXW = 1, surfaceFXH = 1;
+const surfaceClouds = Array.from({length:12},(_,i)=>({
+  x:(i/12)*1.25-0.10,
+  y:0.16+((i*37)%100)/100*0.25,
+  s:0.65+((i*17)%100)/100*0.75,
+  speed:0.0007+((i*13)%100)/100*0.0012,
+  phase:(i*1.73)%6.283
+}));
+function resizeSurfaceFX(){
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  surfaceFXW=window.innerWidth; surfaceFXH=window.innerHeight;
+  surfaceFX.width=Math.round(surfaceFXW*dpr);
+  surfaceFX.height=Math.round(surfaceFXH*dpr);
+  surfaceFX.style.width=surfaceFXW+'px';
+  surfaceFX.style.height=surfaceFXH+'px';
+  surfaceFXCtx.setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener('resize',resizeSurfaceFX);
+resizeSurfaceFX();
+
+function drawCloud(ctx,cx,cy,scale,alpha,warm){
+  ctx.save();
+  ctx.translate(cx,cy);
+  ctx.scale(scale,scale);
+  ctx.globalAlpha=alpha;
+  const puffs=[
+    [-130,16,78,35],[-78,-8,90,52],[-15,-22,108,60],
+    [55,-4,105,50],[122,18,72,32],[10,18,138,42]
+  ];
+  puffs.forEach((p,j)=>{
+    const [x,y,rx,ry]=p;
+    const g=ctx.createRadialGradient(x,y,2,x,y,Math.max(rx,ry));
+    if(warm){
+      g.addColorStop(0,'rgba(255,226,192,.72)');
+      g.addColorStop(.52,'rgba(230,199,182,.42)');
+      g.addColorStop(1,'rgba(120,137,160,0)');
+    }else{
+      g.addColorStop(0,'rgba(230,236,239,.62)');
+      g.addColorStop(.55,'rgba(180,194,207,.38)');
+      g.addColorStop(1,'rgba(90,108,130,0)');
+    }
+    ctx.fillStyle=g;
+    ctx.beginPath(); ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2); ctx.fill();
+  });
+  ctx.restore();
+}
+
+function drawSurfaceCinematic(t){
+  if(!surfaceFX.classList.contains('show')) return;
+  const ctx=surfaceFXCtx, W=surfaceFXW, H=surfaceFXH;
+  ctx.clearRect(0,0,W,H);
+
+  // Rich cinematic sky gradient.
+  const horizonY=H*0.57;
+  const sky=ctx.createLinearGradient(0,0,0,horizonY);
+  sky.addColorStop(0,'#173b62');
+  sky.addColorStop(.35,'#3f6688');
+  sky.addColorStop(.62,'#a65d55');
+  sky.addColorStop(.84,'#e58a58');
+  sky.addColorStop(1,'#f7b06a');
+  ctx.fillStyle=sky; ctx.fillRect(0,0,W,horizonY+3);
+
+  // Subtle upper atmospheric vignette.
+  const upper=ctx.createLinearGradient(0,0,0,H*.5);
+  upper.addColorStop(0,'rgba(8,24,47,.34)');
+  upper.addColorStop(1,'rgba(8,24,47,0)');
+  ctx.fillStyle=upper; ctx.fillRect(0,0,W,H*.5);
+
+  // Sunset haze at horizon.
+  const haze=ctx.createLinearGradient(0,horizonY-100,0,horizonY+70);
+  haze.addColorStop(0,'rgba(255,180,105,0)');
+  haze.addColorStop(.55,'rgba(255,157,87,.28)');
+  haze.addColorStop(1,'rgba(255,196,127,.06)');
+  ctx.fillStyle=haze; ctx.fillRect(0,horizonY-100,W,170);
+
+  // Slow drifting cloud layers.
+  surfaceClouds.forEach((c,i)=>{
+    const drift=((t*c.speed*W*0.22+c.phase*40)% (W*1.35))-W*.18;
+    const cx=drift;
+    const cy=c.y*H + Math.sin(t*.10+c.phase)*3;
+    drawCloud(ctx,cx,cy,70*c.s,0.32+(i%4)*0.035,cy>H*.26);
+  });
+
+  // Clearly visible setting sun, screen-space so it can never hide behind the water mesh.
+  const sx=W*.67 + Math.sin(t*.025)*2.0;
+  const sy=horizonY-26;
+  const pulse=1+Math.sin(t*.55)*.025;
+
+  const halo=ctx.createRadialGradient(sx,sy,8,sx,sy,145*pulse);
+  halo.addColorStop(0,'rgba(255,247,214,.70)');
+  halo.addColorStop(.22,'rgba(255,205,123,.38)');
+  halo.addColorStop(.55,'rgba(255,150,73,.16)');
+  halo.addColorStop(1,'rgba(255,110,50,0)');
+  ctx.fillStyle=halo; ctx.beginPath(); ctx.arc(sx,sy,145*pulse,0,Math.PI*2); ctx.fill();
+
+  const disc=ctx.createRadialGradient(sx-5,sy-5,2,sx,sy,30*pulse);
+  disc.addColorStop(0,'#fffce5');
+  disc.addColorStop(.45,'#ffe4a0');
+  disc.addColorStop(.78,'#ffc15f');
+  disc.addColorStop(1,'rgba(255,151,69,.96)');
+  ctx.fillStyle=disc; ctx.beginPath(); ctx.arc(sx,sy,28*pulse,0,Math.PI*2); ctx.fill();
+
+  // Thin horizon atmospheric line.
+  const line=ctx.createLinearGradient(0,0,W,0);
+  line.addColorStop(0,'rgba(255,193,130,0)');
+  line.addColorStop(.35,'rgba(255,190,123,.28)');
+  line.addColorStop(.67,'rgba(255,190,123,.28)');
+  line.addColorStop(1,'rgba(255,193,130,0)');
+  ctx.fillStyle=line; ctx.fillRect(0,horizonY-1,W,3);
+}
+
+const waterUniforms = {
+  uTime: { value:0 },
+  uSunDir: { value:new THREE.Vector3(0.0,0.34,-0.94).normalize() },
+  uColorDeep: { value:new THREE.Color(0x063247) },
+  uColorShallow: { value:new THREE.Color(0x197f92) },
+  uColorHorizon: { value:new THREE.Color(0x9b5b42) },
+  uFoam: { value:new THREE.Color(0xfff4df) },
+  uSunColor: { value:new THREE.Color(0xffbd6a) }
+};
+
+const waterVert = `
+  uniform float uTime;
+  varying vec3 vNormal;
+  varying vec3 vWorldPos;
+  varying float vHeight;
+
+  float wave(vec2 p, float freq, float amp, float speed, vec2 dir){
+    return amp * sin(dot(p, normalize(dir))*freq + uTime*speed);
+  }
+
+  float wave2(vec2 p, float freq, float amp, float speed, vec2 dir){
+    float s = sin(dot(p, normalize(dir))*freq + uTime*speed);
+    return amp * (0.62*s + 0.38*sin(dot(p, normalize(dir))*freq*1.93 + uTime*speed*1.21));
+  }
+
+  void main(){
+    vec3 pos = position;
+    float h = 0.0;
+
+    // Large swells + crossing chop + small capillary ripples.
+    h += wave(pos.xz, 0.016, 1.75, 0.62, vec2(1.0,0.22));
+    h += wave(pos.xz, 0.027, 1.05, 0.84, vec2(-0.42,1.0));
+    h += wave2(pos.xz, 0.052, 0.58, 1.22, vec2(0.78,0.42));
+    h += wave2(pos.xz, 0.092, 0.24, 1.85, vec2(-0.55,0.83));
+    h += wave(pos.xz, 0.17, 0.10, 2.75, vec2(0.95,-0.30));
+    h += wave(pos.xz, 0.28, 0.045, 3.75, vec2(-0.25,-1.0));
+
+    // Sharpen some crests so the water reads as irregular rolling waves.
+    h += 0.10 * pow(max(0.0, sin(dot(pos.xz, normalize(vec2(0.78,0.42)))*0.052 + uTime*1.20)), 3.0);
+    pos.y += h;
+    vHeight = h;
+
+    float e = 0.55;
+    float hx = 0.0;
+    float hz = 0.0;
+
+    hx += wave(pos.xz+vec2(e,0.0),0.018,2.7,0.72,vec2(1.0,0.18));
+    hx += wave(pos.xz+vec2(e,0.0),0.031,1.45,0.98,vec2(-0.35,1.0));
+    hx += wave2(pos.xz+vec2(e,0.0),0.060,0.72,1.45,vec2(0.78,0.42));
+    hx += wave2(pos.xz+vec2(e,0.0),0.105,0.34,2.10,vec2(-0.55,0.83));
+
+    hz += wave(pos.xz+vec2(0.0,e),0.018,2.7,0.72,vec2(1.0,0.18));
+    hz += wave(pos.xz+vec2(0.0,e),0.031,1.45,0.98,vec2(-0.35,1.0));
+    hz += wave2(pos.xz+vec2(0.0,e),0.060,0.72,1.45,vec2(0.78,0.42));
+    hz += wave2(pos.xz+vec2(0.0,e),0.105,0.34,2.10,vec2(-0.55,0.83));
+
+    vec3 tangentX = normalize(vec3(e, hx-h, 0.0));
+    vec3 tangentZ = normalize(vec3(0.0, hz-h, e));
+    vNormal = normalize(cross(tangentZ, tangentX));
+
+    vec4 wp = modelMatrix * vec4(pos,1.0);
+    vWorldPos = wp.xyz;
+    gl_Position = projectionMatrix * viewMatrix * wp;
+  }
+`;
+
+const waterFrag = `
+  uniform float uTime;
+  uniform vec3 uSunDir;
+  uniform vec3 uColorDeep;
+  uniform vec3 uColorShallow;
+  uniform vec3 uColorHorizon;
+  uniform vec3 uFoam;
+  uniform vec3 uSunColor;
+
+  varying vec3 vNormal;
+  varying vec3 vWorldPos;
+  varying float vHeight;
+
+  float hash21(vec2 p){
+    p = fract(p*vec2(123.34,456.21));
+    p += dot(p,p+45.32);
+    return fract(p.x*p.y);
+  }
+
+  float softNoise(vec2 p){
+    vec2 i=floor(p), f=fract(p);
+    f=f*f*(3.0-2.0*f);
+    float a=hash21(i);
+    float b=hash21(i+vec2(1.0,0.0));
+    float c=hash21(i+vec2(0.0,1.0));
+    float d=hash21(i+vec2(1.0,1.0));
+    return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);
+  }
+
+  void main(){
+    vec3 viewDir = normalize(cameraPosition - vWorldPos);
+    float ndv = clamp(dot(viewDir,vNormal),0.0,1.0);
+    float fresnel = pow(1.0-ndv,3.0);
+
+    // Realistic ocean palette: darker foreground, softer warm horizon.
+    float horizon = smoothstep(1200.0,20.0,-vWorldPos.z);
+    vec3 base = mix(uColorDeep,uColorShallow,0.30 + fresnel*0.18);
+    base = mix(base,uColorHorizon,0.10*horizon);
+
+    vec3 halfDir = normalize(viewDir + normalize(uSunDir));
+    float spec = pow(max(dot(vNormal,halfDir),0.0),72.0);
+    float micro = pow(max(dot(vNormal,halfDir),0.0),180.0);
+
+    // Broken golden reflection directly beneath the setting sun.
+    float depthFromSun = abs(vWorldPos.z + 900.0);
+    float spread = 12.0 + depthFromSun*0.018;
+    float center = -22.0 + sin(vWorldPos.z*0.012 + uTime*0.18)*5.0;
+    float path = exp(-pow((vWorldPos.x-center)/spread,2.0));
+    float chop = 0.35 + 0.65*softNoise(vWorldPos.xz*vec2(0.045,0.018)+uTime*0.55);
+    float shimmer = 0.55 + 0.45*sin(vWorldPos.x*0.10 + vWorldPos.z*0.035 + uTime*4.2);
+    float reflection = path*chop*shimmer*(0.35+0.65*fresnel);
+    reflection *= smoothstep(1350.0,40.0,-vWorldPos.z);
+
+    // Fine crest foam — sparse and broken, never broad white slabs.
+    float crest = smoothstep(1.55,2.35,vHeight);
+    float foamNoise = smoothstep(0.42,0.82,softNoise(vWorldPos.xz*0.08+uTime*0.22));
+    float foamMask = crest*foamNoise;
+
+    vec3 col = base;
+    col += spec * vec3(1.0,0.73,0.42) * 0.32;
+    col += micro * vec3(1.0,0.91,0.70) * 0.55;
+    col += reflection * uSunColor * 1.05;
+    col += foamMask * uFoam * 0.30;
+
+    // Gentle atmospheric lift at the distant horizon.
+    col = mix(col,uColorHorizon,0.08*horizon);
+    gl_FragColor = vec4(col,1.0);
+  }
+`;
+
+const waterGeo = new THREE.PlaneGeometry(3600,3600,240,240);
+waterGeo.rotateX(-Math.PI/2);
+const waterMat = new THREE.ShaderMaterial({
+  uniforms:waterUniforms,
+  vertexShader:waterVert,
+  fragmentShader:waterFrag
+});
+const waterMesh = new THREE.Mesh(waterGeo,waterMat);
+oceanGroup.add(waterMesh);
+
+/* Sunset sky — warm horizon, darker upper sky, soft atmospheric transition. */
+const skyGeo = new THREE.SphereGeometry(3000,48,32);
+const skyMat = new THREE.ShaderMaterial({
+  uniforms:{
+    top:{value:new THREE.Color(0x174a73)},
+    upper:{value:new THREE.Color(0x4c79a0)},
+    horizon:{value:new THREE.Color(0xf0a064)},
+    glow:{value:new THREE.Color(0xffc477)}
+  },
+  side:THREE.BackSide,
+  vertexShader:`
+    varying vec3 vP;
+    void main(){
+      vP=position;
+      gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);
+    }`,
+  fragmentShader:`
+    varying vec3 vP;
+    uniform vec3 top;
+    uniform vec3 upper;
+    uniform vec3 horizon;
+    uniform vec3 glow;
+    void main(){
+      float h=normalize(vP).y*0.5+0.5;
+      vec3 c=mix(horizon,upper,smoothstep(0.08,0.48,h));
+      c=mix(c,top,smoothstep(0.48,0.96,h));
+      float warm=exp(-pow((h-0.31)*7.0,2.0));
+      c=mix(c,glow,warm*0.32);
+      gl_FragColor=vec4(c,1.0);
+    }`
+});
+const skyMesh = new THREE.Mesh(skyGeo,skyMat);
+oceanGroup.add(skyMesh);
+
+/* Soft sun disc texture, kept inside oceanGroup so other screens are untouched. */
+function sunsetSunTexture(){
+  const c=document.createElement('canvas');
+  c.width=256; c.height=256;
+  const ctx=c.getContext('2d');
+  const g=ctx.createRadialGradient(128,128,10,128,128,128);
+  g.addColorStop(0,'rgba(255,248,214,1)');
+  g.addColorStop(0.20,'rgba(255,218,139,1)');
+  g.addColorStop(0.42,'rgba(255,174,83,0.82)');
+  g.addColorStop(0.70,'rgba(255,143,61,0.25)');
+  g.addColorStop(1,'rgba(255,120,40,0)');
+  ctx.fillStyle=g;
+  ctx.fillRect(0,0,256,256);
+  return new THREE.CanvasTexture(c);
+}
+const sunSpriteMat = new THREE.SpriteMaterial({
+  map:sunsetSunTexture(),
+  transparent:true,
+  depthWrite:false,
+  depthTest:false
+});
+const sunSprite = new THREE.Sprite(sunSpriteMat);
+sunSprite.position.set(-22,42,-900);
+sunSprite.scale.set(120,120,1);
+oceanGroup.add(sunSprite);
+
+/* Sunset glow along the horizon. */
+const hazeGeo = new THREE.PlaneGeometry(3200,180);
+const hazeMat = new THREE.MeshBasicMaterial({
+  color:0xff9a5c,
+  transparent:true,
+  opacity:0.13,
+  depthWrite:false,
+  side:THREE.DoubleSide
+});
+const hazeMesh = new THREE.Mesh(hazeGeo,hazeMat);
+hazeMesh.position.set(0,28,-1250);
+hazeMesh.lookAt(camera.position);
+oceanGroup.add(hazeMesh);
+
+/* Procedural soft cloud sprite. */
+function cloudTexture(){
+  const c=document.createElement('canvas');
+  c.width=512; c.height=256;
+  const ctx=c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+  const blobs=[
+    [100,145,88,48],[170,118,92,64],[250,135,120,58],
+    [340,120,90,54],[410,148,75,42],[275,92,72,48]
+  ];
+  blobs.forEach(([x,y,rx,ry])=>{
+    const g=ctx.createRadialGradient(x,y,8,x,y,Math.max(rx,ry));
+    g.addColorStop(0,'rgba(255,228,196,0.78)');
+    g.addColorStop(0.55,'rgba(232,218,206,0.45)');
+    g.addColorStop(1,'rgba(170,184,201,0)');
+    ctx.fillStyle=g;
+    ctx.beginPath();
+    ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2);
+    ctx.fill();
+  });
+  return new THREE.CanvasTexture(c);
+}
+const cloudTextureShared = cloudTexture();
+const cloudGroup = new THREE.Group();
+oceanGroup.add(cloudGroup);
+const cloudSprites=[];
+for(let i=0;i<10;i++){
+  const mat=new THREE.SpriteMaterial({
+    map:cloudTextureShared,
+    transparent:true,
+    depthWrite:false,
+    depthTest:false,
+    opacity:0.42+Math.random()*0.28
+  });
+  const s=new THREE.Sprite(mat);
+  s.position.set(
+    (Math.random()-0.5)*1450,
+    70+Math.random()*130,
+    -420-Math.random()*1150
+  );
+  const sc=230+Math.random()*260;
+  s.scale.set(sc,sc*0.48,1);
+  s.userData.baseX=s.position.x;
+  s.userData.baseY=s.position.y;
+  s.userData.phase=Math.random()*Math.PI*2;
+  s.userData.speed=4+Math.random()*7;
+  cloudGroup.add(s);
+  cloudSprites.push(s);
+}
+
+/* Distant vessels: small silhouettes moving slowly across the horizon. */
+function makeVessel(){
+  const g=new THREE.Group();
+  const hull=new THREE.Mesh(
+    new THREE.BoxGeometry(34,6,8),
+    new THREE.MeshStandardMaterial({color:0x18252b,roughness:0.95,metalness:0.02})
+  );
+  hull.position.y=2;
+  g.add(hull);
+
+  const cabin=new THREE.Mesh(
+    new THREE.BoxGeometry(11,7,7),
+    new THREE.MeshStandardMaterial({color:0x26373d,roughness:0.9})
+  );
+  cabin.position.set(-3,8,0);
+  g.add(cabin);
+
+  const mast=new THREE.Mesh(
+    new THREE.CylinderGeometry(0.55,0.55,15,6),
+    new THREE.MeshStandardMaterial({color:0x10191d,roughness:1})
+  );
+  mast.position.set(5,12,0);
+  g.add(mast);
+
+  const lightMat=new THREE.MeshBasicMaterial({color:0xffc66d});
+  const lamp=new THREE.Mesh(new THREE.SphereGeometry(1.2,8,8),lightMat);
+  lamp.position.set(5,19,0);
+  g.add(lamp);
+
+  return g;
+}
+const vesselGroup=new THREE.Group();
+oceanGroup.add(vesselGroup);
+const vessels=[];
+for(let i=0;i<4;i++){
+  const v=makeVessel();
+  v.scale.setScalar(0.32+Math.random()*0.18);
+  v.position.set(-500+i*340,4+Math.random()*4,-620-i*140);
+  v.userData.baseX=v.position.x;
+  v.userData.baseZ=v.position.z;
+  v.userData.speed=3+Math.random()*4;
+  v.userData.phase=Math.random()*Math.PI*2;
+  vesselGroup.add(v);
+  vessels.push(v);
+}
+
+/* Warm surface lighting for the cinematic scene only. */
+const oceanSun = new THREE.DirectionalLight(0xffb36a,2.7);
+oceanSun.position.set(-40,80,-900);
+oceanGroup.add(oceanSun);
+const oceanFill = new THREE.HemisphereLight(0x9bc9e8,0x24343a,0.55);
+oceanGroup.add(oceanFill);
+
+function updateOceanSurface(t){
+  // Sun gently breathes without leaving the sunset position.
+  const pulse=1.0+Math.sin(t*0.55)*0.035;
+  sunSprite.scale.set(120*pulse,120*pulse,1);
+  sunSprite.position.x=-22+Math.sin(t*0.035)*3.0;
+
+  // Clouds drift slowly, each on a slightly different path.
+  cloudSprites.forEach((s,i)=>{
+    s.position.x=s.userData.baseX + Math.sin(t*0.018+s.userData.phase)*34 + t*s.userData.speed*0.28;
+    if(s.position.x>900) s.position.x=-900;
+    s.position.y=s.userData.baseY + Math.sin(t*0.11+s.userData.phase)*2.5;
+  });
+
+  // Vessels move continuously along the distant horizon.
+  vessels.forEach(v=>{
+    v.position.x=v.userData.baseX + Math.sin(t*0.12+v.userData.phase)*18 + t*v.userData.speed*0.75;
+    if(v.position.x>850) v.userData.baseX=-850;
+    v.position.y=4.0 + Math.sin(t*0.7+v.userData.phase)*0.55;
+    v.rotation.y=0.02*Math.sin(t*0.35+v.userData.phase);
+  });
+
+  oceanSun.position.x=-40+Math.sin(t*0.08)*8;
+  oceanSun.position.z=-900;
+  oceanSun.intensity=2.55+Math.sin(t*0.45)*0.18;
+  waterUniforms.uSunDir.value.copy(oceanSun.position).normalize();
+}
+
+/* ---------------------------------------------------------------
+   11. UNDERWATER GROUP
+--------------------------------------------------------------- */
+const underGroup = new THREE.Group(); underGroup.visible = false; scene.add(underGroup);
+
+// sediment / particle field (world-relative to ROV, wraps in a box)
+const PCOUNT = 3200;
+const pGeo = new THREE.BufferGeometry();
+const pPos = new Float32Array(PCOUNT*3);
+const pSeed = new Float32Array(PCOUNT);
+const FIELD = 140;
+for(let i=0;i<PCOUNT;i++){
+  pPos[i*3] = (Math.random()-0.5)*FIELD;
+  pPos[i*3+1] = (Math.random()-0.5)*FIELD*0.6;
+  pPos[i*3+2] = (Math.random()-0.5)*FIELD;
+  pSeed[i] = Math.random()*10;
+}
+pGeo.setAttribute('position', new THREE.BufferAttribute(pPos,3));
+const pMat = new THREE.PointsMaterial({ map:snowTex, size:0.16, sizeAttenuation:true, transparent:true, opacity:0.42, depthWrite:false, blending:THREE.NormalBlending, color:0xd0e8f2 });
+const particles = new THREE.Points(pGeo, pMat);
+underGroup.add(particles);
+
+// light rays (a handful of large soft cones near surface)
+const rayGroup = new THREE.Group(); underGroup.add(rayGroup);
+for(let i=0;i<7;i++){
+  const rg = new THREE.PlaneGeometry(14,120);
+  const rm = new THREE.MeshBasicMaterial({ map:rayTex, transparent:true, opacity:0.35, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide });
+  const rmesh = new THREE.Mesh(rg, rm);
+  rmesh.position.set((Math.random()-0.5)*90, 30, (Math.random()-0.5)*90);
+  rmesh.rotation.z = (Math.random()-0.5)*0.6;
+  rmesh.rotation.y = Math.random()*Math.PI;
+  rmesh.userData.baseX = rmesh.position.x;
+  rmesh.userData.baseZ = rmesh.position.z;
+  rmesh.userData.phase = Math.random()*10;
+  rayGroup.add(rmesh);
+}
+
+/* ---------------------------------------------------------------
+   11b. UNDERWATER TERRAIN — seabed, rocks, coral, kelp
+   Distributed across depth bands so descending reveals different scenery.
+--------------------------------------------------------------- */
+const terrainGroup = new THREE.Group(); underGroup.add(terrainGroup);
+const kelpStrands = [];
+
+function rockMesh(size, colorHex, rough){
+  const geo = new THREE.IcosahedronGeometry(size, 0);
+  const pos = geo.attributes.position;
+  for(let i=0;i<pos.count;i++){
+    const jitter = 1 + (Math.random()-0.5)*0.35;
+    pos.setXYZ(i, pos.getX(i)*jitter, pos.getY(i)*jitter*0.8, pos.getZ(i)*jitter);
+  }
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({ color:colorHex, roughness:rough, metalness:0.05, flatShading:true });
+  const m = new THREE.Mesh(geo, mat);
+  m.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI);
+  return m;
+}
+function scatterRocks(group, y, count, spread, sizeMin, sizeMax, colors){
+  for(let i=0;i<count;i++){
+    const a = Math.random()*Math.PI*2, r = Math.sqrt(Math.random())*spread;
+    const size = sizeMin + Math.random()*(sizeMax-sizeMin);
+    const color = colors[(Math.random()*colors.length)|0];
+    const rock = rockMesh(size, color, 0.85+Math.random()*0.1);
+    rock.position.set(Math.cos(a)*r, y + (Math.random()-0.5)*size*0.6, Math.sin(a)*r);
+    group.add(rock);
+  }
+}
+function buildKelp(x,z,y,h,hue){
+  const segs = 6;
+  const geo = new THREE.PlaneGeometry(0.5, h, 1, segs);
+  geo.translate(0, h/2, 0);
+  const mat = new THREE.MeshStandardMaterial({ color:hue, roughness:0.7, side:THREE.DoubleSide, transparent:true, opacity:0.85 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x,y,z);
+  mesh.rotation.y = Math.random()*Math.PI;
+  mesh.userData.phase = Math.random()*10;
+  mesh.userData.baseGeo = geo.attributes.position.array.slice();
+  terrainGroup.add(mesh);
+  kelpStrands.push(mesh);
+}
+function buildCoral(x,z,y,scale,hue){
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({
+    color: hue,
+    roughness: 0.55,
+    emissive: new THREE.Color(hue).multiplyScalar(0.08)
+  });
+  // Organic coral colony: rounded lobes stacked on a short trunk — no pointy spikes
+  const branches = 3 + Math.floor(Math.random()*4);
+  for(let i=0; i<branches; i++){
+    // Round lobe — IcosahedronGeometry gives organic rock-like shape
+    const lobeSz = 0.18 + Math.random()*0.22;
+    const lobe = new THREE.Mesh(new THREE.IcosahedronGeometry(lobeSz, 1), mat);
+    // Jitter vertices slightly for organic look
+    const lp = lobe.geometry.attributes.position;
+    for(let v=0; v<lp.count; v++){
+      lp.setXYZ(v, lp.getX(v)*(0.85+Math.random()*0.35), lp.getY(v)*(0.7+Math.random()*0.55), lp.getZ(v)*(0.85+Math.random()*0.35));
+    }
+    lobe.geometry.computeVertexNormals();
+    const a = (i/branches)*Math.PI*2 + Math.random()*0.6;
+    const r = Math.random()*0.28;
+    lobe.position.set(Math.cos(a)*r, lobeSz*0.7 + Math.random()*0.14, Math.sin(a)*r);
+    lobe.rotation.set((Math.random()-0.5)*0.4, Math.random()*Math.PI, (Math.random()-0.5)*0.3);
+    g.add(lobe);
+  }
+  // Short base trunk
+  const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.05+Math.random()*0.04, 0.07+Math.random()*0.05, 0.18+Math.random()*0.14, 7),
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(hue).lerp(new THREE.Color(0x3a2b1c), 0.4), roughness: 0.9 })
+  );
+  trunk.position.y = 0.06;
+  g.add(trunk);
+  g.position.set(x, y, z);
+  g.scale.setScalar(scale);
+  terrainGroup.add(g);
+}
+
+// shallow band (~0-15m): coral + bright kelp
+for(let i=0;i<18;i++){
+  const a=Math.random()*Math.PI*2, r=10+Math.random()*70;
+  buildCoral(Math.cos(a)*r, Math.sin(a)*r, -2.5-Math.random()*4, 0.8+Math.random()*0.8, [0xff7a59,0xffb347,0xff5c8a,0x4be3c8][(Math.random()*4)|0]);
+}
+for(let i=0;i<26;i++){
+  const a=Math.random()*Math.PI*2, r=8+Math.random()*80;
+  buildKelp(Math.cos(a)*r, Math.sin(a)*r, -14-Math.random()*4, 6+Math.random()*7, 0x1f7a4d);
+}
+scatterRocks(terrainGroup, -6, 20, 90, 0.4, 1.1, [0x8a7d6b,0x716454,0x9c8f78]);
+
+// mid band (~40-80m -> y ~ -5 to -10 local scale, spread wider): bigger rocks, sparse kelp
+const midRockGroup = new THREE.Group(); midRockGroup.position.y = -46; terrainGroup.add(midRockGroup);
+scatterRocks(midRockGroup, 0, 34, 100, 0.8, 2.4, [0x5c5a52,0x716a5e,0x46453f]);
+for(let i=0;i<10;i++){
+  const a=Math.random()*Math.PI*2, r=15+Math.random()*70;
+  buildKelp(Math.cos(a)*r, Math.sin(a)*r, -55-Math.random()*6, 5+Math.random()*5, 0x2a5240);
+}
+
+// mid-depth continental slope shelf (~800m -> y ~ -96m): rocky formations, boulders, sediment
+const shelf800Y = -800 * M2U - 2;
+const shelf800Geo = new THREE.PlaneGeometry(380, 380, 36, 36);
+shelf800Geo.rotateX(-Math.PI/2);
+const s800pos = shelf800Geo.attributes.position;
+for(let i=0; i<s800pos.count; i++){
+  s800pos.setY(i, s800pos.getY(i) + Math.sin(s800pos.getX(i)*0.035)*3.8 + Math.cos(s800pos.getZ(i)*0.04)*3.2 + (Math.random()-0.5)*1.2);
+}
+shelf800Geo.computeVertexNormals();
+const shelf800Mat = new THREE.MeshStandardMaterial({ color:0x121c22, roughness:0.95, metalness:0.04 });
+const shelf800Mesh = new THREE.Mesh(shelf800Geo, shelf800Mat);
+shelf800Mesh.position.y = shelf800Y;
+terrainGroup.add(shelf800Mesh);
+scatterRocks(terrainGroup, shelf800Y + 3, 36, 160, 1.4, 4.8, [0x1a262e, 0x141f26, 0x0f171d, 0x24323c]);
+
+// deep seabed (near max depth 3000m): sparse dark rocks + bumpy floor
+const deepY = -MAX_DEPTH_M*M2U + 6;
+const floorGeo = new THREE.PlaneGeometry(450,450,44,44);
+floorGeo.rotateX(-Math.PI/2);
+const fpos = floorGeo.attributes.position;
+for(let i=0;i<fpos.count;i++){
+  fpos.setY(i, fpos.getY(i) + Math.sin(fpos.getX(i)*0.04)*2.4 + Math.cos(fpos.getZ(i)*0.05)*2.4 + (Math.random()-0.5)*0.9);
+}
+floorGeo.computeVertexNormals();
+const floorMat = new THREE.MeshStandardMaterial({ color:0x080e12, roughness:1.0 });
+const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+floorMesh.position.y = deepY;
+terrainGroup.add(floorMesh);
+scatterRocks(terrainGroup, deepY+3, 28, 170, 1.0, 3.8, [0x101518,0x161d20,0x0b0e10]);
+
+function updateKelp(t){
+  kelpStrands.forEach(k=>{
+    const pos = k.geometry.attributes.position;
+    const base = k.userData.baseGeo;
+    for(let i=0;i<pos.count;i++){
+      const by = base[i*3+1];
+      const sway = Math.sin(t*0.8 + k.userData.phase + by*0.5) * (by*0.06) + STATE.currentVX*by*0.15;
+      pos.setX(i, base[i*3] + sway);
+    }
+    pos.needsUpdate = true;
+  });
+}
+
+/* ---------------------------------------------------------------
+   11c. BIOLUMINESCENT PLANKTON (extra sparkle at depth)
+--------------------------------------------------------------- */
+const bioGeo = new THREE.BufferGeometry();
+const BIOCOUNT = 500;
+const bioPos = new Float32Array(BIOCOUNT*3);
+for(let i=0;i<BIOCOUNT;i++){
+  bioPos[i*3]=(Math.random()-0.5)*FIELD; bioPos[i*3+1]=(Math.random()-0.5)*FIELD*0.6; bioPos[i*3+2]=(Math.random()-0.5)*FIELD;
+}
+bioGeo.setAttribute('position', new THREE.BufferAttribute(bioPos,3));
+const bioMat = new THREE.PointsMaterial({ map:dotTex, size:0.35, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending, color:0x59ffcf });
+const bioParticles = new THREE.Points(bioGeo, bioMat);
+underGroup.add(bioParticles);
+
+// underwater fog + background color driven by depth (updated dynamically in updateDepthEnvironment)
+
+
+/* ---------------------------------------------------------------
+   12. ASSET MANAGER & ROV (Biologically normalized scaling & first-person POV)
+--------------------------------------------------------------- */
+const ASSETS = {};
+const MIXERS = [];
+const gltfLoader = (typeof THREE !== 'undefined' && typeof THREE.GLTFLoader !== 'undefined') ? new THREE.GLTFLoader() : null;
+
+// Scale target convention: sizeTarget is in Three.js world units (real meters * M2U)
+// isROV flag: when true, NEVER alter the material — preserve all GLB PBR data
+function loadMarineModel(name, path, scaleTarget, onReady){
+  if(!gltfLoader){
+    if(onReady) onReady(null);
+    return;
+  }
+  const isROV = (name === 'rov');
+  gltfLoader.load(path, gltf=>{
+    gltf.scene.traverse(c=>{
+      if(c.isMesh){
+        c.castShadow = true; c.receiveShadow = true;
+        if(c.material && !isROV){
+          // For fish: only apply fallback color when there is no texture AND color is pure white
+          if(!c.material.map && (!c.material.color || c.material.color.getHex()===0xffffff)){
+            const colorMap = { 'Blue_Tang':0x1a75d2, 'yellow_tang':0xf2c420, 'clownfish':0xf36523, 'Mackerel':0x6a8c9e, 'tuna_fish':0x2e5c82, 'sea_turtle':0x3e6b42, 'moon_jellyfish':0xb0e2ff, 'Reef Shark':0x5a6d78, 'anglerfish':0x2b3842 };
+            for(let k in colorMap){ if(path.includes(k)){ c.material.color.setHex(colorMap[k]); break; } }
+          }
+        }
+        // Fix texture filtering on all models for sharpness
+        if(c.material){
+          const fixTex = t=>{ if(t){ t.anisotropy = renderer.capabilities.getMaxAnisotropy(); t.needsUpdate = true; } };
+          fixTex(c.material.map);
+          fixTex(c.material.normalMap);
+          fixTex(c.material.roughnessMap);
+          fixTex(c.material.metalnessMap);
+          fixTex(c.material.emissiveMap);
+          c.material.needsUpdate = true;
+        }
+      }
+    });
+
+    const box = new THREE.Box3().setFromObject(gltf.scene);
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z) || 1;
+    const s = scaleTarget / maxDim;
+    const center = box.getCenter(new THREE.Vector3());
+    gltf.scene.position.sub(center);
+
+    const root = new THREE.Group();
+    root.add(gltf.scene);
+    root.scale.setScalar(s);
+
+    ASSETS[name] = { root, gltf, size, baseScale:s, animations:gltf.animations||[] };
+    if(onReady) onReady(ASSETS[name]);
+  }, undefined, err=>{
+    console.warn('Asset loader fallback for', path);
+    if(onReady) onReady(null);
+  });
+}
+
+function cloneGltfModel(asset){
+  if(!asset) return null;
+  const cloneScene = asset.root.clone(true);
+  let mixer = null;
+  if(asset.animations && asset.animations.length > 0){
+    mixer = new THREE.AnimationMixer(cloneScene);
+    const action = mixer.clipAction(asset.animations[0]);
+    action.play();
+    action.timeScale = 0.85 + Math.random()*0.35;
+    mixer.update(Math.random()*4);
+    MIXERS.push(mixer);
+  }
+  return { group: cloneScene, mixer };
+}
+
+/* ROV Explorer (2.2m real length -> 0.264 Three.js units) */
+const ROV_REAL_SCALE = 2.2 * M2U; // 0.264 units
+const rov = new THREE.Group();
+rov.position.set(0, -6 * M2U, 0);
+underGroup.add(rov);
+
+const fallbackHull = new THREE.Group();
+(function initFallbackHull(){
+  const mat = new THREE.MeshStandardMaterial({ color:0xffa51a, metalness:0.6, roughness:0.35 });
+  const dark = new THREE.MeshStandardMaterial({ color:0x182026, metalness:0.75, roughness:0.4 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.22, 16), mat);
+  body.rotateX(Math.PI/2); body.position.z = -0.02; fallbackHull.add(body);
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 12, 0, Math.PI*2, 0, Math.PI/2), mat);
+  nose.rotateX(Math.PI/2); nose.position.z = 0.09; fallbackHull.add(nose);
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.08, 16), dark);
+  tail.rotateX(-Math.PI/2); tail.position.z = -0.16; fallbackHull.add(tail);
+  rov.add(fallbackHull);
+})();
+
+loadMarineModel('rov', 'models/rov.glb', ROV_REAL_SCALE, asset=>{
+  if(asset){
+    fallbackHull.visible = false;
+    asset.root.position.set(0, 0, 0);
+    rov.add(asset.root);
+  }
+});
+
+// Dual high-intensity ocean headlights mounted on vehicle bow
+const lightsGroup = new THREE.Group();
+[[-0.04, 0.02, 0.14], [0.04, 0.02, 0.14]].forEach(p=>{
+  const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.008, 8, 8), new THREE.MeshBasicMaterial({ color:0xffffff }));
+  bulb.position.set(p[0], p[1], p[2]);
+  lightsGroup.add(bulb);
+  const sp = new THREE.SpotLight(0xdfffff, 7.0, 45, Math.PI/5.5, 0.45, 1.2);
+  sp.position.set(p[0], p[1], p[2]);
+  const target = new THREE.Object3D(); target.position.set(p[0]*0.4, p[1]-0.02, p[2]+18);
+  rov.add(target); sp.target = target;
+  lightsGroup.add(sp);
+});
+rov.add(lightsGroup);
+rov.userData.lights = lightsGroup;
+
+const rovSpot1 = new THREE.PointLight(0x7ad8ff, 1.4, 6.0);
+rovSpot1.position.set(0, 0.04, 0.10);
+rov.add(rovSpot1);
+
+// Thruster bubbles
+const BUBBLE_MAX = 60;
+const bubGeo = new THREE.BufferGeometry();
+const bubPos = new Float32Array(BUBBLE_MAX * 3);
+const bubLife = new Float32Array(BUBBLE_MAX);
+for(let i=0; i<BUBBLE_MAX; i++){ bubLife[i] = 1.0; }
+bubGeo.setAttribute('position', new THREE.BufferAttribute(bubPos, 3));
+const bubMat = new THREE.PointsMaterial({ map:dotTex, size:0.06, transparent:true, opacity:0.65, depthWrite:false, blending:THREE.AdditiveBlending, color:0xd0f5ff });
+const thrusterBubbles = new THREE.Points(bubGeo, bubMat);
+underGroup.add(thrusterBubbles);
+
+function updateThrusterBubbles(dt){
+  const posArr = bubGeo.attributes.position.array;
+  const isMoving = STATE.rov && (STATE.rov.speed > 0.4);
+  for(let i=0; i<BUBBLE_MAX; i++){
+    bubLife[i] += dt * 1.8;
+    if(bubLife[i] >= 1.0){
+      if(isMoving && Math.random() < 0.45){
+        bubLife[i] = 0.0;
+        posArr[i*3] = rov.position.x + (Math.random()-0.5)*0.06;
+        posArr[i*3+1] = rov.position.y - 0.01 + (Math.random()-0.5)*0.03;
+        posArr[i*3+2] = rov.position.z - 0.22;
+      }
+    } else {
+      posArr[i*3] += (Math.random()-0.5)*0.01 + STATE.currentVX*dt;
+      posArr[i*3+1] += dt * 0.12;
+      posArr[i*3+2] += STATE.currentVZ*dt - 0.04*dt;
+    }
+  }
+  bubGeo.attributes.position.needsUpdate = true;
+}
+
+// Diver arms eliminated — third-person ROV camera mode active
+const diverArms = new THREE.Group();
+diverArms.visible = false;
+
+/* ---------------------------------------------------------------
+   13. LIVING MARINE ECOSYSTEM (Detailed Species & Procedural Schools)
+--------------------------------------------------------------- */
+const marineLife = {
+  tangGroup: new THREE.Group(),        // Detailed Blue & Yellow Tangs (0-75m reef)
+  clownGroup: new THREE.Group(),       // Detailed Clownfish (0-40m coral)
+  mackerelGroup: new THREE.Group(),    // Detailed Mackerel (15-250m pelagic)
+  tunaGroup: new THREE.Group(),        // Detailed Pelagic Tuna (30-400m open ocean)
+  turtleGroup: new THREE.Group(),      // Detailed Sea Turtle (5-90m upper ocean)
+  jellyGroup: new THREE.Group(),       // Moon Jellyfish (10-1200m depth tiers)
+  sharkGroup: new THREE.Group(),       // Reef Shark (20-180m perimeter patrol)
+  anglerGroup: new THREE.Group(),      // Anglerfish (800-3000m abyss)
+  proceduralGroup: new THREE.Group(),  // Lightweight background schooling fish
+};
+Object.values(marineLife).forEach(g => underGroup.add(g));
+
+// Species Biological Scale Targets in Three.js units (M2U = 0.12)
+const SCALES = {
+  clownfish:   0.12 * M2U, // ~0.0144
+  yellow_tang: 0.18 * M2U, // ~0.0216
+  blue_tang:   0.26 * M2U, // ~0.0312
+  mackerel:    0.38 * M2U, // ~0.0456
+  tuna:        1.30 * M2U, // ~0.1560
+  jellyfish:   0.35 * M2U, // ~0.0420
+  turtle:      1.00 * M2U, // ~0.1200
+  shark:       1.70 * M2U, // ~0.2040
+  angler:      0.28 * M2U, // ~0.0336
+};
+
+// Detailed Single GLB Entity States
+let blueTangEntity = null;
+let yellowTangEntity = null;
+let clownEntity = null;
+let mackerelEntity = null;
+let tunaEntity = null;
+let turtleEntity = null;
+let sharkEntity = null;
+
+// Moon Jellyfish (Current-drifting depth tier instances)
+const jellyEntities = [];
+const jellyConfigs = [
+  { dM: 12, x: -3.5, z: 8.5, drift: 0.4 },
+  { dM: 25, x: 5.5, z: 11.0, drift: 1.2 },
+  { dM: 55, x: -7.0, z: 13.0, drift: 2.1 },
+  { dM: 95, x: 6.5, z: 16.0, drift: 0.8 },
+  { dM: 180, x: -9.0, z: 18.0, drift: 2.8 },
+  { dM: 320, x: 7.5, z: 15.0, drift: 1.6 },
+  { dM: 580, x: -5.0, z: 19.0, drift: 2.3 },
+  { dM: 950, x: 4.0, z: 14.0, drift: 1.0 },
+];
+jellyConfigs.forEach((cfg, i) => {
+  const dY = -cfg.dM * M2U;
+  jellyEntities.push({
+    pos: new THREE.Vector3(cfg.x, dY, cfg.z),
+    driftAngle: cfg.drift,
+    phase: i * 0.9,
+    baseY: dY,
+    scale: 0.92 + (i % 3) * 0.08,
+    mesh: null,
+    baseScale: 0.04,
+    materials: [],
+  });
+});
+
+// Deep-sea Anglerfish (3 abyssal lurkers)
+const anglerEntities = [];
+
+// Load Detailed GLB Models
+loadMarineModel('blue_tang', 'models/Blue_Tang.glb', SCALES.blue_tang, asset=>{
+  if(!asset) return;
+  const inst = cloneGltfModel(asset);
+  blueTangEntity = {
+    group: inst.group,
+    pos: new THREE.Vector3(-3.2, -1.8, 7.5),
+    vel: new THREE.Vector3(0.5, 0.05, 0.7).normalize().multiplyScalar(0.9),
+    phase: 0.0,
+  };
+  blueTangEntity.group.position.copy(blueTangEntity.pos);
+  blueTangEntity.group.userData.species = 'blue_tang';
+  marineLife.tangGroup.add(blueTangEntity.group);
+});
+
+loadMarineModel('yellow_tang', 'models/yellow_tang.glb', SCALES.yellow_tang, asset=>{
+  if(!asset) return;
+  const inst = cloneGltfModel(asset);
+  yellowTangEntity = {
+    group: inst.group,
+    pos: new THREE.Vector3(4.2, -2.2, 8.5),
+    vel: new THREE.Vector3(-0.6, -0.04, 0.6).normalize().multiplyScalar(0.9),
+    phase: 1.8,
+  };
+  yellowTangEntity.group.position.copy(yellowTangEntity.pos);
+  yellowTangEntity.group.userData.species = 'yellow_tang';
+  marineLife.tangGroup.add(yellowTangEntity.group);
+});
+
+loadMarineModel('clownfish', 'models/clownfish.glb', SCALES.clownfish, asset=>{
+  if(!asset) return;
+  const inst = cloneGltfModel(asset);
+  clownEntity = {
+    group: inst.group,
+    home: new THREE.Vector3(-2.8, -1.5, 6.2),
+    pos: new THREE.Vector3(-2.8, -1.5, 6.2),
+    phase: 0.0,
+  };
+  clownEntity.group.position.copy(clownEntity.pos);
+  clownEntity.group.userData.species = 'clownfish';
+  marineLife.clownGroup.add(clownEntity.group);
+});
+
+loadMarineModel('mackerel', 'models/Mackerel.glb', SCALES.mackerel, asset=>{
+  if(!asset) return;
+  const inst = cloneGltfModel(asset);
+  mackerelEntity = {
+    group: inst.group,
+    pos: new THREE.Vector3(0.5, -4.2, 11.5),
+    vel: new THREE.Vector3(0.8, 0.05, 0.9).normalize().multiplyScalar(1.3),
+    phase: 0.0,
+  };
+  mackerelEntity.group.position.copy(mackerelEntity.pos);
+  mackerelEntity.group.userData.species = 'mackerel';
+  marineLife.mackerelGroup.add(mackerelEntity.group);
+});
+
+loadMarineModel('tuna', 'models/tuna_fish.glb', SCALES.tuna, asset=>{
+  if(!asset) return;
+  const inst = cloneGltfModel(asset);
+  tunaEntity = {
+    group: inst.group,
+    pos: new THREE.Vector3(12.0, -7.5, 16.0),
+    vel: new THREE.Vector3(-0.8, 0.02, 0.6).normalize().multiplyScalar(2.6),
+    phase: 0.0,
+  };
+  tunaEntity.group.position.copy(tunaEntity.pos);
+  tunaEntity.group.userData.species = 'tuna';
+  marineLife.tunaGroup.add(tunaEntity.group);
+});
+
+loadMarineModel('turtle', 'models/sea_turtle.glb', SCALES.turtle, asset=>{
+  if(!asset) return;
+  const inst = cloneGltfModel(asset);
+  turtleEntity = {
+    group: inst.group,
+    pos: new THREE.Vector3(-6.5, -2.8, 13.5),
+    vel: new THREE.Vector3(0.5, 0.01, 0.4).normalize().multiplyScalar(0.5),
+    phase: 0.0,
+  };
+  turtleEntity.group.position.copy(turtleEntity.pos);
+  turtleEntity.group.userData.species = 'turtle';
+  marineLife.turtleGroup.add(turtleEntity.group);
+});
+
+loadMarineModel('shark', 'models/Reef Shark.glb', SCALES.shark, asset=>{
+  if(!asset) return;
+  const inst = cloneGltfModel(asset);
+  sharkEntity = {
+    group: inst.group,
+    mixer: inst.mixer,
+    pos: new THREE.Vector3(-15.0, -5.5, 17.0),
+    heading: 0.7,
+    speed: 1.5,
+    turnPhase: 0.0,
+  };
+  sharkEntity.group.position.copy(sharkEntity.pos);
+  sharkEntity.group.userData.species = 'shark';
+  marineLife.sharkGroup.add(sharkEntity.group);
+});
+
+loadMarineModel('jellyfish', 'models/moon_jellyfish.glb', SCALES.jellyfish, asset=>{
+  if(!asset) return;
+  jellyEntities.forEach(j=>{
+    const inst = cloneGltfModel(asset);
+    j.mesh = inst.group;
+    j.mesh.position.copy(j.pos);
+    j.baseScale = asset.baseScale * j.scale;
+    j.mesh.scale.setScalar(j.baseScale);
+    j.mesh.userData.species = 'jellyfish';
+    j.mesh.traverse(c=>{
+      if(c.isMesh && c.material){
+        c.material.transparent = true;
+        c.material.opacity = 0.65;
+        c.material.emissive = new THREE.Color(0x3ee6ff);
+        c.material.emissiveIntensity = 0.2;
+        j.materials.push(c.material);
+      }
+    });
+    marineLife.jellyGroup.add(j.mesh);
+  });
+});
+
+loadMarineModel('angler', 'models/anglerfish.glb', SCALES.angler, asset=>{
+  if(!asset) return;
+  const anglerConfigs = [
+    { pos: new THREE.Vector3(-6, shelf800Y + 1.2, 12), baseY: shelf800Y + 1.2 },
+    { pos: new THREE.Vector3(10, shelf800Y + 2.2, 16), baseY: shelf800Y + 2.2 },
+    { pos: new THREE.Vector3(2, deepY + 3.2, 18), baseY: deepY + 3.2 }
+  ];
+  anglerConfigs.forEach((cfg, i) => {
+    const inst = cloneGltfModel(asset);
+    inst.group.userData.species = 'angler';
+    inst.group.position.copy(cfg.pos);
+    const lureLight = new THREE.PointLight(0x40ffc8, 1.4, 5.0);
+    lureLight.position.set(0, 0.018, 0.024);
+    inst.group.add(lureLight);
+    const ang = {
+      group: inst.group,
+      lureLight,
+      pos: cfg.pos.clone(),
+      baseY: cfg.baseY,
+      phase: i * Math.PI * 0.7,
+    };
+    anglerEntities.push(ang);
+    marineLife.anglerGroup.add(inst.group);
+  });
+});
+
+/* ---------------------------------------------------------------
+   13b. LIGHTWEIGHT PROCEDURAL FISH SCHOOLS (Background population)
+--------------------------------------------------------------- */
+function createProceduralFishMesh(colorHex, scale){
+  const fish = new THREE.Group();
+  const s = scale;
+  
+  // Hydrodynamic low-poly body
+  const bodyGeo = new THREE.ConeGeometry(0.010 * s, 0.044 * s, 6);
+  bodyGeo.rotateX(Math.PI/2);
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: colorHex,
+    roughness: 0.35,
+    metalness: 0.25,
+  });
+  const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
+  bodyMesh.position.z = 0.008 * s;
+  fish.add(bodyMesh);
+
+  // Animated tail fin on pivot
+  const tailPivot = new THREE.Group();
+  tailPivot.position.z = -0.018 * s;
+  const tailGeo = new THREE.BufferGeometry();
+  const tVerts = new Float32Array([
+    0, 0, 0,
+    0, 0.014 * s, -0.018 * s,
+    0, -0.014 * s, -0.018 * s,
+    0, 0, 0,
+    0, -0.014 * s, -0.018 * s,
+    0, 0.014 * s, -0.018 * s,
+  ]);
+  tailGeo.setAttribute('position', new THREE.BufferAttribute(tVerts, 3));
+  tailGeo.computeVertexNormals();
+  const finMat = new THREE.MeshStandardMaterial({
+    color: colorHex,
+    roughness: 0.4,
+    metalness: 0.2,
+    side: THREE.DoubleSide
+  });
+  const tailMesh = new THREE.Mesh(tailGeo, finMat);
+  tailPivot.add(tailMesh);
+  fish.add(tailPivot);
+
+  // Small top dorsal fin
+  const dorsalGeo = new THREE.BufferGeometry();
+  const dVerts = new Float32Array([
+    0, 0.006 * s, 0.004 * s,
+    0, 0.015 * s, -0.008 * s,
+    0, 0.004 * s, -0.015 * s,
+    0, 0.006 * s, 0.004 * s,
+    0, 0.004 * s, -0.015 * s,
+    0, 0.015 * s, -0.008 * s,
+  ]);
+  dorsalGeo.setAttribute('position', new THREE.BufferAttribute(dVerts, 3));
+  dorsalGeo.computeVertexNormals();
+  const dorsalMesh = new THREE.Mesh(dorsalGeo, finMat);
+  fish.add(dorsalMesh);
+
+  fish.userData.species = 'mackerel';
+  return { group: fish, tail: tailPivot };
+}
+
+// Procedural School Definitions
+const proceduralSchools = [
+  // 1. Shallow Blue Reef School (8 fish, depth 0-60m)
+  {
+    name: 'Blue Tang / Damselfish School',
+    species: 'blue_tang',
+    minDepth: 0, maxDepth: 75,
+    center: new THREE.Vector3(-4.5, -1.8, 8.5),
+    color: 0x1b88e8,
+    members: []
+  },
+  // 2. Shallow Golden Tang School (7 fish, depth 0-75m)
+  {
+    name: 'Yellow Tang Reef School',
+    species: 'yellow_tang',
+    minDepth: 0, maxDepth: 80,
+    center: new THREE.Vector3(5.5, -2.4, 10.5),
+    color: 0xf2b705,
+    members: []
+  },
+  // 3. Silver Pelagic Mackerel School (8 fish, depth 15-220m)
+  {
+    name: 'Silver Mackerel Minnows',
+    species: 'mackerel',
+    minDepth: 10, maxDepth: 250,
+    center: new THREE.Vector3(-1.5, -4.5, 13.5),
+    color: 0xa4c6d4,
+    members: []
+  },
+  // 4. Open-Water Indigo Pelagic School (6 fish, depth 80-450m)
+  {
+    name: 'Pelagic Oceanic School',
+    species: 'mackerel',
+    minDepth: 70, maxDepth: 500,
+    center: new THREE.Vector3(3.5, -18.0, 17.5),
+    color: 0x2b4c7e,
+    members: []
+  },
+  // 5. Twilight Drifters (4 fish, depth 450-900m)
+  {
+    name: 'Twilight Drifters',
+    species: 'mackerel',
+    minDepth: 450, maxDepth: 900,
+    center: new THREE.Vector3(-2.5, -65.0, 19.5),
+    color: 0x475569,
+    members: []
+  }
+];
+
+// Initialize all procedural school fish
+const schoolCounts = [8, 7, 8, 6, 4];
+proceduralSchools.forEach((school, sIdx) => {
+  const count = schoolCounts[sIdx];
+  for(let i = 0; i < count; i++){
+    const ang = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
+    const r = 1.2 + Math.random() * 1.8;
+    const scale = 0.88 + Math.random() * 0.24;
+    const pFish = createProceduralFishMesh(school.color, scale);
+    pFish.group.userData.species = school.species;
+    
+    const pos = new THREE.Vector3(
+      school.center.x + Math.sin(ang) * r,
+      school.center.y + (Math.random() - 0.5) * 1.4,
+      school.center.z + Math.cos(ang) * r
+    );
+    const vel = new THREE.Vector3(
+      (Math.random() - 0.5) * 1.2,
+      (Math.random() - 0.5) * 0.2,
+      (Math.random() - 0.5) * 1.2
+    ).normalize().multiplyScalar(0.9 + Math.random() * 0.35);
+
+    pFish.group.position.copy(pos);
+    marineLife.proceduralGroup.add(pFish.group);
+
+    school.members.push({
+      mesh: pFish.group,
+      tail: pFish.tail,
+      pos,
+      vel,
+      speed: vel.length(),
+      phase: Math.random() * Math.PI * 2,
+    });
+  }
+});
+
+/* ---------------------------------------------------------------
+   14. LIVING ECOSYSTEM UPDATE (Habitat zoning, flocking, avoidance)
+--------------------------------------------------------------- */
+function getHabitatType(loc, depthM) {
+  if (depthM > 900) return 'ABYSSAL';
+  if (depthM > 400) return 'DEEP_OCEAN';
+  if (depthM > 150) return 'MESOPELAGIC';
+  if (loc) {
+    const name = (loc.name || '').toLowerCase();
+    if (name.includes('reef') || name.includes('arabian') || name.includes('maldives') || name.includes('coral') || name.includes('red sea') || name.includes('caribbean') || name.includes('trench')) {
+      return 'SHALLOW_REEF';
+    }
+  }
+  return 'OPEN_PELAGIC';
+}
+
+function updateMarineEcosystem(dt, t){
+  MIXERS.forEach(m => m.update(dt));
+
+  const depth = STATE.depthM;
+  const habitat = getHabitatType(STATE.location, depth);
+
+  // Depth-based visibility tiers for detailed GLB animals
+  marineLife.tangGroup.visible  = (depth < 85);
+  marineLife.clownGroup.visible = (depth < 70);
+  marineLife.turtleGroup.visible = (depth < 95);
+  marineLife.mackerelGroup.visible = (depth < 500);
+  marineLife.tunaGroup.visible = (depth > 25 && depth < 600);
+  marineLife.sharkGroup.visible = (depth < 220);
+  marineLife.jellyGroup.visible = true;
+  marineLife.anglerGroup.visible = (depth >= 750);
+  marineLife.proceduralGroup.visible = true;
+
+  // 1. Detailed Blue & Yellow Tangs
+  if(marineLife.tangGroup.visible){
+    if(blueTangEntity && blueTangEntity.group){
+      const f = blueTangEntity;
+      f.pos.addScaledVector(f.vel, dt);
+      f.vel.x += (Math.sin(t*0.6 + f.phase)*0.25 + STATE.currentVX*0.2)*dt;
+      f.vel.z += (Math.cos(t*0.5 + f.phase)*0.25 + STATE.currentVZ*0.2)*dt;
+      const dRov = f.pos.distanceTo(rov.position);
+      if(dRov < 1.3){
+        const evade = f.pos.clone().sub(rov.position).normalize();
+        f.pos.addScaledVector(evade, dt * (1.3 - dRov) * 2.2);
+      }
+      f.pos.y = THREE.MathUtils.clamp(f.pos.y, -70*M2U, -0.6*M2U);
+      if(f.pos.x < -18 || f.pos.x > 18) f.vel.x *= -1;
+      if(f.pos.z < 2 || f.pos.z > 24) f.vel.z *= -1;
+      f.group.position.copy(f.pos);
+      f.group.position.y += Math.sin(t*2.8 + f.phase)*0.008;
+      f.group.lookAt(f.pos.clone().add(f.vel));
+    }
+    if(yellowTangEntity && yellowTangEntity.group){
+      const f = yellowTangEntity;
+      f.pos.addScaledVector(f.vel, dt);
+      f.vel.x += (Math.sin(t*0.55 + f.phase)*0.25 + STATE.currentVX*0.2)*dt;
+      f.vel.z += (Math.cos(t*0.48 + f.phase)*0.25 + STATE.currentVZ*0.2)*dt;
+      const dRov = f.pos.distanceTo(rov.position);
+      if(dRov < 1.3){
+        const evade = f.pos.clone().sub(rov.position).normalize();
+        f.pos.addScaledVector(evade, dt * (1.3 - dRov) * 2.2);
+      }
+      f.pos.y = THREE.MathUtils.clamp(f.pos.y, -70*M2U, -0.6*M2U);
+      if(f.pos.x < -18 || f.pos.x > 18) f.vel.x *= -1;
+      if(f.pos.z < 2 || f.pos.z > 24) f.vel.z *= -1;
+      f.group.position.copy(f.pos);
+      f.group.position.y += Math.sin(t*2.8 + f.phase)*0.008;
+      f.group.lookAt(f.pos.clone().add(f.vel));
+    }
+  }
+
+  // 2. Detailed Clownfish
+  if(marineLife.clownGroup.visible && clownEntity && clownEntity.group){
+    const f = clownEntity;
+    f.pos.set(
+      f.home.x + Math.sin(t*1.6 + f.phase)*0.22,
+      f.home.y + Math.cos(t*1.1 + f.phase)*0.06,
+      f.home.z + Math.cos(t*1.6 + f.phase)*0.22
+    );
+    f.group.position.copy(f.pos);
+    f.group.rotation.y = t*1.6 + f.phase + Math.PI/2;
+    f.group.rotation.z = Math.sin(t*2.6 + f.phase)*0.08;
+  }
+
+  // 3. Detailed Mackerel
+  if(marineLife.mackerelGroup.visible && mackerelEntity && mackerelEntity.group){
+    const f = mackerelEntity;
+    f.pos.addScaledVector(f.vel, dt);
+    f.vel.x += Math.sin(t*0.5)*0.2*dt;
+    f.vel.z += Math.cos(t*0.5)*0.2*dt;
+    f.pos.y = THREE.MathUtils.clamp(f.pos.y, -250*M2U, -15*M2U);
+    if(f.pos.x < -16 || f.pos.x > 16) f.vel.x *= -1;
+    if(f.pos.z < 3 || f.pos.z > 25) f.vel.z *= -1;
+    f.group.position.copy(f.pos);
+    f.group.position.y += Math.sin(t*3.5)*0.015;
+    f.group.lookAt(f.pos.clone().add(f.vel));
+  }
+
+  // 4. Detailed Tuna
+  if(marineLife.tunaGroup.visible && tunaEntity && tunaEntity.group){
+    const f = tunaEntity;
+    f.pos.addScaledVector(f.vel, dt);
+    f.vel.x += Math.sin(t*0.25)*0.35*dt;
+    f.vel.z += Math.cos(t*0.25)*0.35*dt;
+    f.pos.y = THREE.MathUtils.clamp(f.pos.y, -380*M2U, -30*M2U);
+    if(f.pos.x < -24 || f.pos.x > 24) f.vel.x *= -1;
+    if(f.pos.z < 5 || f.pos.z > 35) f.vel.z *= -1;
+    f.group.position.copy(f.pos);
+    f.group.lookAt(f.pos.clone().add(f.vel));
+  }
+
+  // 5. Detailed Sea Turtle
+  if(marineLife.turtleGroup.visible && turtleEntity && turtleEntity.group){
+    const f = turtleEntity;
+    f.pos.addScaledVector(f.vel, dt);
+    f.vel.x += Math.sin(t*0.12)*0.08*dt;
+    f.vel.z += Math.cos(t*0.12)*0.08*dt;
+    if(f.pos.x < -18 || f.pos.x > 18) f.vel.x *= -1;
+    if(f.pos.z < 4 || f.pos.z > 28) f.vel.z *= -1;
+    f.group.position.copy(f.pos);
+    f.group.position.y += Math.sin(t*0.8)*0.02;
+    f.group.lookAt(f.pos.clone().add(f.vel));
+    f.group.rotation.z = Math.sin(t*0.8)*0.05;
+  }
+
+  // 6. Moon Jellyfish (Bioluminescent current drifters)
+  const bioBoost = THREE.MathUtils.clamp((depth - 150) / 750, 0, 1);
+  jellyEntities.forEach(j=>{
+    const pulse = Math.sin(t*1.6 + j.phase)*0.5 + 0.5;
+    j.pos.x += Math.sin(j.driftAngle)*0.08*dt + STATE.currentVX*dt*1.1;
+    j.pos.z += Math.cos(j.driftAngle)*0.08*dt + STATE.currentVZ*dt*1.1;
+    j.pos.y = j.baseY + Math.sin(t*0.35 + j.phase)*0.35;
+
+    if(j.mesh){
+      j.mesh.position.copy(j.pos);
+      const bs = j.baseScale || 0.04;
+      j.mesh.scale.set(bs * (1.0 + pulse*0.1), bs * (0.9 - pulse*0.12), bs * (1.0 + pulse*0.1));
+      j.mesh.rotation.y = j.driftAngle + Math.sin(t*0.2 + j.phase)*0.25;
+    }
+    if(j.materials.length > 0){
+      j.materials.forEach(m => {
+        m.emissiveIntensity = 0.15 + bioBoost * 1.5 + pulse * bioBoost * 0.8;
+      });
+    }
+  });
+
+  // 7. Detailed Reef Shark (Patrolling wide perimeter)
+  if(marineLife.sharkGroup.visible && sharkEntity && sharkEntity.group){
+    sharkEntity.turnPhase += dt * 0.18;
+    sharkEntity.heading += Math.sin(sharkEntity.turnPhase) * 0.25 * dt;
+    const sFwd = new THREE.Vector3(Math.sin(sharkEntity.heading), 0, Math.cos(sharkEntity.heading));
+    sharkEntity.pos.addScaledVector(sFwd, sharkEntity.speed * dt);
+    if(sharkEntity.pos.x < -25 || sharkEntity.pos.x > 25) sharkEntity.heading = Math.PI - sharkEntity.heading;
+    if(sharkEntity.pos.z < 6 || sharkEntity.pos.z > 35) sharkEntity.heading = -sharkEntity.heading;
+    sharkEntity.pos.y = THREE.MathUtils.clamp(sharkEntity.pos.y, -180*M2U, -20*M2U);
+    sharkEntity.group.position.copy(sharkEntity.pos);
+    sharkEntity.group.lookAt(sharkEntity.pos.clone().add(sFwd));
+  }
+
+  // 8. Anglerfish (Deep abyss lurkers)
+  if(marineLife.anglerGroup.visible){
+    anglerEntities.forEach(ang => {
+      ang.phase += dt * 0.35;
+      const curX = ang.pos.x + Math.sin(ang.phase * 0.3) * 1.8;
+      const curZ = ang.pos.z + Math.cos(ang.phase * 0.25) * 1.8;
+      const curY = ang.baseY + Math.sin(t * 0.5) * 0.12;
+      ang.group.position.set(curX, curY, curZ);
+      ang.group.lookAt(curX - Math.cos(ang.phase*0.3), curY, curZ + Math.sin(ang.phase*0.25));
+      if(ang.lureLight){
+        ang.lureLight.intensity = 0.9 + Math.sin(t * 4.2) * 0.35 + Math.sin(t * 11.0) * 0.15;
+      }
+    });
+  }
+
+  // 9. Procedural Schooling Ecosystem Update (Boids + Animated Tails)
+  proceduralSchools.forEach(school => {
+    const isVisible = (depth >= school.minDepth && depth <= school.maxDepth);
+    school.members.forEach(f => {
+      f.mesh.visible = isVisible;
+    });
+    if(!isVisible || school.members.length === 0) return;
+
+    // Dynamic School Center
+    const schoolCenter = new THREE.Vector3();
+    const schoolVel = new THREE.Vector3();
+    school.members.forEach(f => {
+      schoolCenter.add(f.pos);
+      schoolVel.add(f.vel);
+    });
+    schoolCenter.divideScalar(school.members.length);
+    schoolVel.divideScalar(school.members.length);
+
+    school.members.forEach((f, idx) => {
+      // 1. Cohesion to school center
+      const toCenter = schoolCenter.clone().sub(f.pos).multiplyScalar(0.035);
+      f.vel.add(toCenter);
+
+      // 2. Separation from nearby neighbors
+      for(let j = 0; j < school.members.length; j++){
+        if(j !== idx){
+          const d = f.pos.distanceTo(school.members[j].pos);
+          if(d < 0.65 && d > 0.001){
+            f.vel.add(f.pos.clone().sub(school.members[j].pos).multiplyScalar(0.04 / d));
+          }
+        }
+      }
+
+      // 3. Alignment with school velocity
+      f.vel.lerp(schoolVel, 0.025);
+
+      // 4. Natural wander
+      f.vel.x += Math.sin(t * 0.6 + f.phase) * 0.18 * dt;
+      f.vel.z += Math.cos(t * 0.5 + f.phase) * 0.18 * dt;
+      f.vel.x += STATE.currentVX * dt * 0.25;
+      f.vel.z += STATE.currentVZ * dt * 0.25;
+
+      // 5. ROV proximity avoidance
+      const dRov = f.pos.distanceTo(rov.position);
+      if(dRov < 1.4){
+        const evade = f.pos.clone().sub(rov.position).normalize();
+        f.vel.addScaledVector(evade, (1.4 - dRov) * 2.6);
+      }
+
+      // Speed Clamping
+      const spd = f.vel.length();
+      if(spd > 1.8) f.vel.setLength(1.8);
+      if(spd < 0.6) f.vel.setLength(0.6);
+      f.speed = f.vel.length();
+
+      // Position update & boundary constraints
+      f.pos.addScaledVector(f.vel, dt);
+      const minY = -school.maxDepth * M2U;
+      const maxY = -school.minDepth * M2U - 0.5 * M2U;
+      f.pos.y = THREE.MathUtils.clamp(f.pos.y, minY, maxY);
+      if(f.pos.x < -18 || f.pos.x > 18) f.vel.x *= -1;
+      if(f.pos.z < 2 || f.pos.z > 28) f.vel.z *= -1;
+
+      // 3D Object Transform
+      f.mesh.position.copy(f.pos);
+      f.mesh.position.y += Math.sin(t * 3.2 + f.phase) * 0.01;
+      f.mesh.lookAt(f.pos.clone().add(f.vel));
+      f.mesh.rotation.z += Math.sin(t * 4.0 + f.phase) * 0.08;
+
+      // Organic tail wagging animation
+      if(f.tail){
+        f.tail.rotation.y = Math.sin(t * (6.5 + f.speed * 2.8) + f.phase) * 0.42;
+      }
+    });
+  });
+}
+
+/* ---------------------------------------------------------------
+   16. OCEAN CURRENT VISUALIZATION
+   Flow arrows removed — invisible cone meshes caused white triangle
+   artefacts in the scene. Current velocity is still computed and
+   applied to the ROV and marine-life AI.
+--------------------------------------------------------------- */
+STATE.currentVX = 0; STATE.currentVZ = 0;
+const flowArrows = []; // kept so any external references compile
+function updateCurrentVec(){
+  const rad = STATE.current.dirDeg*Math.PI/180;
+  const spd = STATE.current.active ? STATE.current.speed : 0;
+  STATE.currentVX = Math.sin(rad)*spd*0.5;
+  STATE.currentVZ = Math.cos(rad)*spd*0.5;
+}
+function updateFlowArrows(dt){ /* no-op — cone arrows removed */ }
+
+/* ---------------------------------------------------------------
+   17. DEPTH -> ENVIRONMENT (Realistic ocean light attenuation across 8 depth tiers)
+--------------------------------------------------------------- */
+const ZONES = [
+  { d:0,    fog:0x0d5c75, dens:0.009, sun:2.2, amb:0.75 }, // Natural sunlit turquoise blue-green (0-20m)
+  { d:20,   fog:0x0a4660, dens:0.013, sun:1.5, amb:0.55 }, // Tropical clear ocean blue (20-100m)
+  { d:100,  fog:0x072c44, dens:0.019, sun:0.65, amb:0.35 }, // Deep ocean blue (100-200m)
+  { d:200,  fog:0x041b30, dens:0.027, sun:0.18, amb:0.20 }, // Mesopelagic twilight blue (200-500m)
+  { d:500,  fog:0x021020, dens:0.038, sun:0.02, amb:0.10 }, // Deep twilight dark navy (500-1000m)
+  { d:1000, fog:0x010814, dens:0.048, sun:0.00, amb:0.05 }, // Bathypelagic midnight dark blue (1000-2000m)
+  { d:2000, fog:0x00040a, dens:0.058, sun:0.00, amb:0.02 }, // Abyssopelagic near-black (2000-3000m)
+  { d:3000, fog:0x000206, dens:0.068, sun:0.00, amb:0.01 }, // Hadal black void (3000m+)
+];
+const fogColorTmp1 = new THREE.Color(), fogColorTmp2 = new THREE.Color(), fogColorOut = new THREE.Color();
+function zoneLerp(depth){
+  let a=ZONES[0], b=ZONES[ZONES.length-1];
+  for(let i=0;i<ZONES.length-1;i++){
+    if(depth>=ZONES[i].d && depth<=ZONES[i+1].d){ a=ZONES[i]; b=ZONES[i+1]; break; }
+  }
+  const span = Math.max(1,b.d-a.d);
+  const t = THREE.MathUtils.clamp((depth-a.d)/span,0,1);
+  fogColorTmp1.set(a.fog); fogColorTmp2.set(b.fog);
+  fogColorOut.copy(fogColorTmp1).lerp(fogColorTmp2, t);
+  return {
+    fog: fogColorOut.clone(),
+    dens: THREE.MathUtils.lerp(a.dens,b.dens,t),
+    sun: THREE.MathUtils.lerp(a.sun,b.sun,t),
+    amb: THREE.MathUtils.lerp(a.amb,b.amb,t),
+  };
+}
+function updateDepthEnvironment(){
+  if(STATE.mode !== 'underwater' && STATE.mode !== 'ascending') return;
+  const z = zoneLerp(STATE.depthM);
+  scene.fog.color.copy(z.fog);
+  scene.fog.density = z.dens;
+  scene.background = z.fog;
+  renderer.setClearColor(z.fog, 1.0);
+  sun.intensity = z.sun * 1.2;
+  ambient.color.copy(z.fog).lerp(new THREE.Color(0xffffff), 0.12);
+  ambient.intensity = z.amb;
+  
+  // ROV headlights intensity: headlights pierce deeper as ambient light dims
+  const lightBoost = THREE.MathUtils.clamp(1.5 - z.sun * 0.45, 0.8, 3.0) * (STATE.lightsOn ? 1 : 0.04);
+  if(rov.userData.lights){
+    rov.userData.lights.children.forEach(c => { if(c.isSpotLight) c.intensity = 7.0 * lightBoost; });
+  }
+  rovSpot1.intensity = 1.4 * lightBoost;
+  
+  // Sunlight shafts (god rays): visible near surface, fading by 90m
+  rayGroup.children.forEach(r => r.material.opacity = 0.4 * THREE.MathUtils.clamp(1 - STATE.depthM / 90, 0, 1));
+  
+  // Bioluminescent plankton sparkle
+  const bio = THREE.MathUtils.clamp((STATE.depthM - 180) / 800, 0, 1);
+  bioMat.opacity = bio * 0.75;
+  bioParticles.position.copy(rov.position);
+}
+
+/* ---------------------------------------------------------------
+   18. DIVE SEQUENCE (Continuous physical camera voyage: space -> ocean -> surface crossing -> underwater)
+--------------------------------------------------------------- */
+/* ---------------------------------------------------------------
+   18. DIVE SEQUENCE (Continuous physical camera voyage: space -> ocean -> surface crossing -> underwater)
+--------------------------------------------------------------- */
+function startDive(){
+  if(!STATE.location) return;
+  closePanel('locpanel');
+  STATE.mode = 'diving';
+  updateUIForMode('diving');
+  labelRoot.style.display = 'none';
+  showHint('Descending from orbit toward '+STATE.location.name+'…');
+  controls.enabled = false;
+
+  const loc = STATE.location;
+  const surfacePos = latLonToVec3(loc.lat, loc.lon, EARTH_R);
+  const orbitCamPos = camera.position.clone();
+  const atmoCamPos = surfacePos.clone().normalize().multiplyScalar(EARTH_R * 1.15);
+  const closeCamPos = surfacePos.clone().normalize().multiplyScalar(EARTH_R * 1.008);
+
+  // Phase 1: High Orbit -> Upper Atmosphere (2.4s)
+  tweenCam(atmoCamPos, surfacePos.clone(), 2400, easeInOutCubic, ()=>{
+    // Phase 2: Atmosphere -> Sea Level (1.8s)
+    tweenCam(closeCamPos, surfacePos.clone(), 1800, t=>t*t, ()=>{
+      crossIntoWater();
+    });
+  });
+}
+
+function crossIntoWater(){
+  // Seamless physical descent through open air and breaching water surface
+  starGroup.visible = false;
+  earthGroup.visible = false;
+  oceanGroup.visible = true;
+  underGroup.visible = false;
+  controls.enabled = false;
+  STATE.mode = 'ocean-surface';
+  
+  // Start camera above open ocean waves
+  camera.position.set(0, 26, 68);
+  camera.lookAt(0, 4, -120);
+  showHint('Breaching the ocean surface…');
+
+  const targetUnderwaterY = -6.0 * M2U;
+  const targetCamPos = new THREE.Vector3(0, targetUnderwaterY + 0.65, -2.2);
+  const targetLookAt = new THREE.Vector3(0, targetUnderwaterY - 0.02, 0.9);
+
+  const t0 = performance.now();
+  const dur = 3600;
+  const fromPos = camera.position.clone();
+  const fromLook = new THREE.Vector3(0, 4, -120);
+  const curLook = new THREE.Vector3();
+
+  rov.position.set(0, targetUnderwaterY, 0);
+  STATE.rov.pos.copy(rov.position);
+  STATE.rov.targetDepth = null;
+  STATE.depthM = 6.0;
+
+  function surfaceDescentStep(){
+    const now = performance.now();
+    const t = Math.min(1, (now - t0) / dur);
+    const e = easeInOutCubic(t);
+    
+    // Smooth physical plunge from air -> water surface (y=0) -> exact ROV follow position
+    const curX = THREE.MathUtils.lerp(fromPos.x, targetCamPos.x, e);
+    const curY = THREE.MathUtils.lerp(fromPos.y, targetCamPos.y, e);
+    const curZ = THREE.MathUtils.lerp(fromPos.z, targetCamPos.z, e);
+    camera.position.set(curX, curY, curZ);
+
+    curLook.lerpVectors(fromLook, targetLookAt, e);
+    camera.lookAt(curLook);
+
+    // Dynamic environmental shift as camera breaches y=0
+    if(curY <= 0.2 && !underGroup.visible){
+      underGroup.visible = true;
+      oceanGroup.visible = false;
+      updateDepthEnvironment();
+      showHint('WASD thrust · A/D turn · Q/E depth · Click creatures to inspect');
+      setTimeout(()=>document.getElementById('hint').classList.remove('show'), 5500);
+      if(STATE.location){
+        aiPush('ai', `Dive initiated at ${STATE.location.name}. Piloting ROV Explorer at ${STATE.depthM.toFixed(0)}m. Controls: W/S thrust, A/D steering, Q/E vertical depth. Ask me about conditions, depth, or marine life.`);
+      }
+    }
+
+    if(t < 1){
+      requestAnimationFrame(surfaceDescentStep);
+    } else {
+      enterUnderwaterComplete();
+    }
+  }
+  requestAnimationFrame(surfaceDescentStep);
+}
+
+function enterUnderwaterComplete(){
+  starGroup.visible = false;
+  earthGroup.visible = false;
+  oceanGroup.visible = false;
+  underGroup.visible = true;
+  STATE.mode = 'underwater';
+  updateUIForMode('underwater');
+  updateDepthEnvironment();
+}
+
+/* ---------------------------------------------------------------
+   18b. BACK TO EARTH — smooth physical ascent & orbit return
+--------------------------------------------------------------- */
+function backToEarth(onDone){
+  if(STATE.mode!=='underwater') return;
+  STATE.mode = 'ascending';
+  updateUIForMode('ascending');
+  showHint('Ascending to the surface…');
+  
+  const t0 = performance.now();
+  const dur = THREE.MathUtils.clamp(STATE.depthM * 2.5, 1500, 5000);
+  const fromY = rov.position.y;
+  
+  function ascendStep(){
+    const t = Math.min(1, (performance.now()-t0)/dur);
+    rov.position.y = THREE.MathUtils.lerp(fromY, -0.6 * M2U, easeInOutCubic(t));
+    STATE.depthM = THREE.MathUtils.clamp(-rov.position.y/M2U, 0, MAX_DEPTH_M);
+    updateDepthEnvironment();
+    updateHUD();
+    if(t < 1){
+      requestAnimationFrame(ascendStep);
+    } else {
+      surfaceAndReturn(onDone);
+    }
+  }
+  requestAnimationFrame(ascendStep);
+}
+
+function surfaceAndReturn(onDone){
+  underGroup.visible = false;
+  oceanGroup.visible = true;
+  starGroup.visible = false;
+  earthGroup.visible = false;
+  scene.background = null;
+  camera.position.set(0, 1.2, 10);
+  camera.lookAt(0, 6, -50);
+  showHint('Breaching surface into open air…');
+
+  const t0 = performance.now(), dur = 2800, from = camera.position.clone();
+  function riseStep(){
+    const t = Math.min(1, (performance.now()-t0)/dur), e = easeInOutCubic(t);
+    camera.position.set(THREE.MathUtils.lerp(from.x, 0, e), THREE.MathUtils.lerp(from.y, 48, e), THREE.MathUtils.lerp(from.z, 140, e));
+    camera.lookAt(0, 8, 0);
+    waterUniforms.uTime.value = performance.now()/1000;
+    if(t < 1) requestAnimationFrame(riseStep);
+    else returnToEarthView(onDone);
+  }
+  requestAnimationFrame(riseStep);
+}
+
+function returnToEarthView(onDone){
+  oceanGroup.visible = false;
+  underGroup.visible = false;
+  earthGroup.visible = true;
+  starGroup.visible = true;
+  scene.background = null;
+  renderer.setClearColor(0x020810, 1.0);
+  if(scene.fog) scene.fog.density = 0;
+  
+  sun.intensity = 1.35;
+  sun.position.set(600, 250, 400);
+  ambient.intensity = 0.28;
+  ambient.color.setHex(0x0e1c2e);
+  
+  camera.fov = 45;
+  camera.updateProjectionMatrix();
+  
+  labelRoot.style.display = '';
+  STATE.mode = 'space';
+  updateUIForMode('space');
+  
+  const loc = STATE.location;
+  if(loc){
+    const surfacePos = latLonToVec3(loc.lat, loc.lon, EARTH_R);
+    const camTarget = surfacePos.clone().normalize().multiplyScalar(EARTH_R * 2.2);
+    camera.position.copy(surfacePos.clone().normalize().multiplyScalar(EARTH_R * 3.4));
+    camera.lookAt(0, 0, 0);
+    controls.target.set(0, 0, 0);
+    controls.update();
+    controls.enabled = false;
+    tweenCam(camTarget, new THREE.Vector3(0, 0, 0), 2000, easeInOutCubic, ()=>{
+      if(STATE.ocean) buildLocLabels(STATE.ocean);
+      showHint(`Back at ${loc.name} — select a location to dive again`);
+      if(onDone) onDone();
+    });
+  } else {
+    camera.position.set(0, 60, 520);
+    camera.lookAt(0, 0, 0);
+    controls.target.set(0, 0, 0);
+    controls.enabled = true;
+    controls.update();
+    if(onDone) onDone();
+  }
+}
+
+document.getElementById('backtoearthbtn').addEventListener('click', ()=>backToEarth());
+
+/* ---------------------------------------------------------------
+   19. ROV CONTROLS & FAST HYDRODYNAMIC PHYSICS
+--------------------------------------------------------------- */
+window.addEventListener('keydown', e=>{ STATE.keys[e.code]=true; });
+window.addEventListener('keyup', e=>{ STATE.keys[e.code]=false; });
+document.querySelectorAll('#rovpad button, #vertpad button').forEach(btn=>{
+  const k = btn.dataset.k;
+  const on = ev=>{ ev.preventDefault(); STATE.keys[k]=true; };
+  const off = ev=>{ ev.preventDefault(); STATE.keys[k]=false; };
+  btn.addEventListener('touchstart', on); btn.addEventListener('touchend', off);
+  btn.addEventListener('mousedown', on); btn.addEventListener('mouseup', off); btn.addEventListener('mouseleave', off);
+});
+
+const rovVel = new THREE.Vector3();
+// Responsive powered ROV physics tuning (Requirement 13 & 14)
+const ROV_ACCEL = 26.0;          // forward/reverse thrust accel (world units/s^2)
+const ROV_VERT_ACCEL = 20.0;     // vertical thrust accel
+const ROV_MAX_SPEED = 28.0;      // top speed, world units/s (~24 knots)
+const ROV_DAMP = 0.94;           // hydrodynamic drag
+const ROV_TURN_ACCEL = 4.2;      // yaw angular accel
+const ROV_TURN_DAMP = 0.88;      // yaw angular damping
+const ROV_MAX_ANGVEL = 2.4;      // rad/s turn rate cap
+const ROV_BASE_FOV = 45;
+const ROV_MAX_FOV_BOOST = 12;    // FOV boost at high speed
+
+function updateROV(dt){
+  if(STATE.mode!=='underwater') return;
+  const k = STATE.keys;
+  const accel = ROV_ACCEL, maxSpeed = ROV_MAX_SPEED, damp = ROV_DAMP;
+  let thrustF = 0, thrustStrafe = 0, thrustV = 0, turnInput = 0;
+  if(k['KeyW']||k['ArrowUp']) thrustF += 1;
+  if(k['KeyS']||k['ArrowDown']) thrustF -= 1;
+  if(k['KeyA']||k['ArrowLeft']) { turnInput += 1; thrustStrafe -= 1; }
+  if(k['KeyD']||k['ArrowRight']) { turnInput -= 1; thrustStrafe += 1; }
+  if(k['KeyQ']||k['Space']) thrustV += 1;
+  if(k['KeyE']||k['KeyC']||k['ShiftLeft']||k['ShiftRight']) thrustV -= 1;
+  if(thrustV!==0) STATE.rov.targetDepth = null; // manual depth cancels autopilot
+
+  // Angular velocity with turning inertia
+  STATE.rov.angVel += turnInput * ROV_TURN_ACCEL * dt;
+  STATE.rov.angVel *= ROV_TURN_DAMP;
+  STATE.rov.angVel = THREE.MathUtils.clamp(STATE.rov.angVel, -ROV_MAX_ANGVEL, ROV_MAX_ANGVEL);
+  STATE.rov.heading += STATE.rov.angVel * dt;
+
+  const fwd = new THREE.Vector3(Math.sin(STATE.rov.heading), 0, Math.cos(STATE.rov.heading));
+  const right = new THREE.Vector3(Math.cos(STATE.rov.heading), 0, -Math.sin(STATE.rov.heading));
+  rovVel.addScaledVector(fwd, thrustF * accel * dt);
+  rovVel.addScaledVector(right, thrustStrafe * accel * dt);
+  rovVel.y += thrustV * ROV_VERT_ACCEL * dt;
+  rovVel.x += STATE.currentVX * dt * 1.5;
+  rovVel.z += STATE.currentVZ * dt * 1.5;
+
+  // FAST DEPTH AUTOPILOT WITH BRAKING CONTROLLER (Requirements 32, 34, 35)
+  STATE.rov.braking = false;
+  if(STATE.rov.targetDepth!==null){
+    const targetY = -STATE.rov.targetDepth * M2U;
+    const diff = targetY - rov.position.y;
+    const distM = Math.abs(diff) / M2U;
+    if(distM < 0.6){
+      STATE.rov.targetDepth = null;
+      rovVel.y *= 0.3; // settle smoothly at target
+    } else {
+      const brakeZoneM = 120; // begin decelerating ~100m before target
+      const t = THREE.MathUtils.clamp(distM / brakeZoneM, 0.06, 1);
+      const autoAccel = accel * (0.22 + t * 1.3);
+      rovVel.y += Math.sign(diff) * autoAccel * dt;
+      STATE.rov.braking = (t < 0.85);
+    }
+  }
+
+  rovVel.multiplyScalar(damp);
+  if(rovVel.length() > maxSpeed) rovVel.setLength(maxSpeed);
+
+  rov.position.addScaledVector(rovVel, dt);
+  rov.position.y = Math.min(rov.position.y, 0.0); // allow reaching surface (0m)
+  rov.position.y = Math.max(rov.position.y, deepY + 3);
+  rov.rotation.y = STATE.rov.heading;
+  
+  // Banking roll into turns & strafe, pitch on vertical/forward motion
+  rov.rotation.z = THREE.MathUtils.lerp(rov.rotation.z, STATE.rov.angVel * 0.35 + thrustStrafe * 0.08, dt * 5);
+  rov.rotation.x = THREE.MathUtils.lerp(rov.rotation.x, thrustF * 0.08 - (rovVel.y / maxSpeed) * 0.35, dt * 4);
+
+  STATE.depthM = THREE.MathUtils.clamp(-rov.position.y / M2U, 0, MAX_DEPTH_M);
+  STATE.rov.speed = rovVel.length();
+
+  // Movement State derived from real velocity
+  const speedRatio = THREE.MathUtils.clamp(STATE.rov.speed / maxSpeed, 0, 1);
+  if(STATE.rov.braking) STATE.rov.moveState = 'BRAKING';
+  else if(Math.abs(rovVel.y) > 2.0) STATE.rov.moveState = rovVel.y < 0 ? 'DESCENDING' : 'ASCENDING';
+  else if(speedRatio > 0.5) STATE.rov.moveState = 'FAST';
+  else if(STATE.rov.speed > 0.4) STATE.rov.moveState = 'CRUISING';
+  else STATE.rov.moveState = 'STATIONARY';
+
+  // Third-person camera: positioned behind and above the ROV so the complete vehicle is visible.
+  // The offset is expressed in ROV-heading space so it stays behind as the vehicle turns.
+  const rovQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, STATE.rov.heading, 0, 'YXZ'));
+
+  // Base offset: 2.2 units behind, 0.65 units above the ROV.
+  // At high speed: pull back slightly and nudge camera higher for dramatic effect.
+  const backDist  = 2.2 + speedRatio * 0.65;
+  const upDist    = 0.65 + speedRatio * 0.15;
+  const bob       = Math.sin(performance.now() * 0.0022) * 0.006 * (0.4 + speedRatio * 0.6);
+  const shakeMag  = speedRatio * speedRatio * 0.0035;
+  const shakeX    = shakeMag ? (Math.random()-0.5)*shakeMag : 0;
+  const shakeY    = shakeMag ? (Math.random()-0.5)*shakeMag : 0;
+
+  // Offset in local ROV space (Z negative = behind the ROV which faces +Z)
+  const camOffsetLocal = new THREE.Vector3(shakeX, upDist + bob + shakeY, -backDist);
+  camOffsetLocal.applyQuaternion(rovQ);
+
+  const desiredCam = rov.position.clone().add(camOffsetLocal);
+  // Smooth camera position follow — lerp factor tuned for responsive but not snappy feel
+  camera.position.lerp(desiredCam, 1.0 - Math.pow(0.0002, dt));
+
+  // Camera always looks forward through the vehicle
+  const lookTarget = rov.position.clone().add(
+    new THREE.Vector3(0, -0.02, 0.9).applyQuaternion(rovQ)
+  );
+  camera.lookAt(lookTarget);
+
+  // Dynamic FOV expands at speed
+  const targetFOV = ROV_BASE_FOV + speedRatio * ROV_MAX_FOV_BOOST;
+  if(Math.abs(camera.fov - targetFOV) > 0.02){
+    camera.fov = THREE.MathUtils.lerp(camera.fov, targetFOV, 1 - Math.pow(0.001, dt));
+    camera.updateProjectionMatrix();
+  }
+  particles.position.copy(rov.position);
+}
+
+/* ---------------------------------------------------------------
+   20. HUD UPDATE & SCIENTIFIC DATA MODEL
+--------------------------------------------------------------- */
+const STORMS = [
+  { id:'stm-arb-01', name:'Cyclone Meera', type:'Tropical Cyclone', latitude:15.5, longitude:68.2,
+    intensity:78, category:3, windSpeed:165, gustSpeed:205, pressure:958, waveHeight:6.8, maxWaveHeight:11.2,
+    wavePeriod:11, waveDirection:250, rainfall:38, temperature:27.5, movementDirection:310, movementSpeed:14, safetyLevel:'DANGEROUS' },
+  { id:'stm-pac-01', name:'Typhoon Solana', type:'Typhoon', latitude:14.0, longitude:138.5,
+    intensity:64, category:2, windSpeed:130, gustSpeed:160, pressure:972, waveHeight:5.2, maxWaveHeight:8.6,
+    wavePeriod:10, waveDirection:290, rainfall:29, temperature:28.2, movementDirection:300, movementSpeed:18, safetyLevel:'HIGH RISK' },
+  { id:'stm-atl-01', name:'Hurricane Doretta', type:'Hurricane', latitude:26.0, longitude:-68.0,
+    intensity:52, category:1, windSpeed:120, gustSpeed:145, pressure:982, waveHeight:4.4, maxWaveHeight:7.1,
+    wavePeriod:9, waveDirection:60, rainfall:21, temperature:26.8, movementDirection:330, movementSpeed:20, safetyLevel:'HIGH RISK' },
+  { id:'stm-sio-01', name:'Storm Kavali', type:'Tropical Storm', latitude:-19.5, longitude:112.0,
+    intensity:34, category:0, windSpeed:85, gustSpeed:105, pressure:995, waveHeight:3.1, maxWaveHeight:5.0,
+    wavePeriod:8, waveDirection:200, rainfall:14, temperature:26.0, movementDirection:200, movementSpeed:12, safetyLevel:'CAUTION' },
+];
+
+function seededRand(seed){
+  let x = Math.sin(seed*127.1)*43758.5453;
+  return x - Math.floor(x);
+}
+function locSeed(lat, lon, extra){
+  const t = STATE.time||{year:2026};
+  const dateKey = (t.month||1)*31 + (t.day||1) + (t.hour!==undefined?t.hour:12)/24;
+  return (lat*13.7 + lon*7.3 + dateKey*3.1 + (extra||0));
+}
+function nearestStorm(lat, lon){
+  let best=null, bestD=Infinity;
+  STORMS.forEach(s=>{
+    const dLat=s.latitude-lat, dLon=s.longitude-lon;
+    const d = Math.sqrt(dLat*dLat+dLon*dLon);
+    if(d<bestD){ bestD=d; best=s; }
+  });
+  return { storm:best, distDeg:bestD };
+}
+function computeMarineWeather(lat, lon){
+  const { storm, distDeg } = nearestStorm(lat, lon);
+  const influence = storm ? THREE.MathUtils.clamp(1 - distDeg/18, 0, 1) : 0;
+  const t = STATE.time||{year:2026,hour:12};
+  const hour = t.hour!==undefined ? t.hour : 12;
+  const baseSeed = locSeed(lat, lon);
+
+  const tropical = Math.max(0, 1 - Math.abs(lat)/35);
+  const baseWindSpeed = 8 + tropical*10 + seededRand(baseSeed)*6;
+  const windSpeed = baseWindSpeed + influence*(storm.windSpeed-baseWindSpeed);
+  const windDirection = Math.round((seededRand(baseSeed+1)*360 + (storm?storm.movementDirection*influence:0)) % 360);
+  const windGust = windSpeed*(1.2+seededRand(baseSeed+2)*0.15) + influence*15;
+
+  const sigWaveHeight = 0.6 + tropical*0.4 + windSpeed/40 + influence*(storm.waveHeight-1.2);
+  const maxWaveHeight = sigWaveHeight * (1.6 + seededRand(baseSeed+3)*0.3) + influence*(storm.maxWaveHeight-sigWaveHeight*1.6)*0.6;
+  const wavePeriod = 6 + sigWaveHeight*0.6 + seededRand(baseSeed+4)*1.5;
+  const waveDirection = Math.round((windDirection + 15 + seededRand(baseSeed+5)*20) % 360);
+  const waveSpeed = (9.81*wavePeriod/(2*Math.PI))*1.94384;
+  const waveEnergy = 0.5*1025*9.81*Math.pow(sigWaveHeight,2)/1000;
+  let waveCondition = 'Calm';
+  if(sigWaveHeight>6) waveCondition='Phenomenal';
+  else if(sigWaveHeight>4) waveCondition='Very Rough';
+  else if(sigWaveHeight>2.5) waveCondition='Rough';
+  else if(sigWaveHeight>1.25) waveCondition='Moderate';
+  else if(sigWaveHeight>0.5) waveCondition='Slight';
+
+  const temperature = (28 - Math.abs(lat)/90*30) + Math.sin((hour-14)/24*Math.PI*2)*1.5 + seededRand(baseSeed+6)*1.2;
+  const rainfall = Math.max(0, tropical*4 + influence*(storm.rainfall-4) + seededRand(baseSeed+7)*3 - 2);
+  const humidity = THREE.MathUtils.clamp(60 + tropical*20 + rainfall*1.5, 30, 99);
+  const visibility = THREE.MathUtils.clamp(14 - rainfall*0.6 - influence*7, 0.5, 15);
+  let weatherCondition = 'Clear';
+  if(rainfall>18) weatherCondition='Severe Storm';
+  else if(rainfall>8) weatherCondition='Heavy Rain';
+  else if(rainfall>3) weatherCondition='Showers';
+  else if(humidity>80) weatherCondition='Overcast';
+  else if(humidity>65) weatherCondition='Partly Cloudy';
+
+  const stormActive = influence>0.12;
+  const stormStatus = stormActive ? (storm.type+' — '+storm.name) : 'No active storm nearby';
+  const tornadoStatus = (stormActive && storm.category>=3 && tropical>0.6) ? 'Possible — isolated tornadoes in outer bands' : 'None';
+  let safetyLevel = 'SAFE';
+  if(stormActive){
+    if(influence>0.7) safetyLevel='DANGEROUS';
+    else if(influence>0.4) safetyLevel='HIGH_RISK';
+    else safetyLevel='CAUTION';
+  } else if(sigWaveHeight>3){
+    safetyLevel='CAUTION';
+  }
+
+  return {
+    waves:{ sig:sigWaveHeight, max:maxWaveHeight, period:wavePeriod, direction:waveDirection, speed:waveSpeed, energy:waveEnergy, condition:waveCondition },
+    wind:{ speed:windSpeed, direction:windDirection, gust:windGust },
+    weather:{ temperature, rainfall, humidity, visibility, condition:weatherCondition },
+    severe:{ stormActive, stormStatus, tornadoStatus, category: stormActive?storm.category:0, intensity: stormActive?storm.intensity:0,
+             movement: stormActive?`${storm.movementDirection}° at ${storm.movementSpeed} kn`:'—', safetyLevel },
+    nearestStorm: storm, influence,
+  };
+}
+function compassDir(deg){
+  const dirs=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return dirs[Math.round(((deg%360)+360)%360/22.5)%16];
+}
+
+function computeData(depth, lat, year){
+  const yearFactor = 1 + (year-2026)*0.004;
+  const temp = (28 - Math.min(depth,1200)/1200*24 - Math.max(0,depth-1200)/1800*2) * yearFactor;
+  const sal = 34.5 + Math.sin(depth/500)*0.6 + (lat? Math.abs(lat)/300 :0);
+  const oxy = Math.max(0.5, 7.5 - depth/500 + Math.sin(depth/300)*0.8);
+  const pres = 1.0 + Math.max(0, depth) / 10.0;
+  const chl = Math.max(0.02, 0.9*Math.exp(-depth/80));
+  const cur = STATE.current.active ? STATE.current.speed : 0.15+Math.sin(depth/400)*0.1;
+  return { temp, sal, oxy, pres, chl, cur };
+}
+
+const hud = {
+  depth: document.getElementById('hv-depth'), alt: document.getElementById('hv-alt'),
+  target: document.getElementById('hv-target'),
+  heading: document.getElementById('hv-heading'), speed: document.getElementById('hv-speed'),
+  state: document.getElementById('hv-state'),
+  temp: document.getElementById('hv-temp'), sal: document.getElementById('hv-sal'),
+  oxy: document.getElementById('hv-oxy'), pres: document.getElementById('hv-pres'),
+  current: document.getElementById('hv-current'),
+};
+
+function updateHUD(){
+  if(STATE.mode!=='underwater') return;
+  const loc = STATE.location||{lat:0};
+  const d = computeData(STATE.depthM, loc.lat, STATE.time.year);
+  hud.depth.textContent = STATE.depthM.toFixed(0)+' m';
+  hud.target.textContent = STATE.rov.targetDepth!==null ? STATE.rov.targetDepth.toFixed(0)+' m' : '—';
+  hud.alt.textContent = Math.max(0, MAX_DEPTH_M-STATE.depthM).toFixed(0)+' m to floor';
+  hud.heading.textContent = (((-STATE.rov.heading*180/Math.PI)%360+360)%360).toFixed(0)+'°';
+  hud.speed.textContent = (STATE.rov.speed*0.9).toFixed(1)+' kn';
+  hud.state.textContent = STATE.rov.moveState;
+  hud.temp.textContent = d.temp.toFixed(1)+' °C';
+  hud.sal.textContent = d.sal.toFixed(1)+' PSU';
+  hud.oxy.textContent = d.oxy.toFixed(1)+' mg/L';
+  hud.pres.textContent = d.pres.toFixed(0)+' atm';
+  hud.current.textContent = STATE.current.active ? (STATE.current.speed.toFixed(1)+' kn') : 'off';
+
+  const pct = STATE.depthM/MAX_DEPTH_M*100;
+  document.getElementById('depthbar-fill').style.height = pct+'%';
+  document.getElementById('depthbar-marker').style.top = pct+'%';
+
+  document.getElementById('dccurspeed').innerHTML = STATE.current.speed.toFixed(1)+'<small> kn</small>';
+  const dirs=['N','NE','E','SE','S','SW','W','NW'];
+  document.getElementById('dccurdir').textContent = dirs[Math.round(STATE.current.dirDeg/45)%8];
+  document.getElementById('dccurdepth').innerHTML = STATE.depthM.toFixed(0)+'<small> m</small>';
+  document.getElementById('dccurstatus').textContent = STATE.current.active ? 'Active' : 'Calm';
+
+  document.getElementById('d-temp').innerHTML = d.temp.toFixed(1)+'<small>°C</small>';
+  document.getElementById('d-sal').innerHTML = d.sal.toFixed(1)+'<small> PSU</small>';
+  document.getElementById('d-oxy').innerHTML = d.oxy.toFixed(1)+'<small> mg/L</small>';
+  document.getElementById('d-pres').innerHTML = d.pres.toFixed(0)+'<small> atm</small>';
+  document.getElementById('d-cur').innerHTML = d.cur.toFixed(1)+'<small> kn</small>';
+  document.getElementById('d-chl').innerHTML = d.chl.toFixed(2)+'<small> mg/m³</small>';
+  document.getElementById('dc-curdepth').innerHTML = STATE.depthM.toFixed(0)+'<small> m</small>';
+  document.getElementById('dc-targetdepth').textContent = STATE.rov.targetDepth!==null ? STATE.rov.targetDepth.toFixed(0)+'m' : '—';
+  drawDepthGraph();
+}
+
+/* ---------------------------------------------------------------
+   21. CENTRAL UI CONTROLLER & NAVBAR (Requirement 53 & 54)
+--------------------------------------------------------------- */
+function setActiveNavBtn(id){
+  document.querySelectorAll('.mbtn').forEach(btn=>{
+    btn.classList.toggle('active', btn.dataset.id === id);
+  });
+}
+
+function openPanel(id){
+  document.getElementById(id).classList.add('show');
+  const panelToNav = {
+    'divecontrolpanel': 'depth',
+    'creaturepanel': 'life',
+    'analyzepanel': 'analyze',
+    'timepanel': 'time'
+  };
+  if(panelToNav[id]) setActiveNavBtn(panelToNav[id]);
+}
+
+function closePanel(id){
+  document.getElementById(id).classList.remove('show');
+  if(STATE.mode === 'underwater'){
+    setActiveNavBtn('depth');
+  } else if(STATE.mode === 'waves'){
+    setActiveNavBtn('waves');
+  } else if(STATE.mode === 'space'){
+    setActiveNavBtn('earth');
+  }
+}
+document.querySelectorAll('[data-close]').forEach(x=>x.addEventListener('click', ()=>closePanel(x.dataset.close)));
+
+const ALL_PANELS = ['divecontrolpanel','creaturepanel','currentpanel','analyzepanel','timepanel','aipanel'];
+
+// Navbar items: EARTH, DEPTH, MARINE LIFE, WAVES, ANALYZE, TIME
+const MODES = [
+  { id:'earth', label:'EARTH', panel:null },
+  { id:'depth', label:'DEPTH', panel:'divecontrolpanel' },
+  { id:'life', label:'MARINE LIFE', panel:'creaturepanel' },
+  { id:'waves', label:'WAVES', panel:null },
+  { id:'analyze', label:'ANALYZE', panel:'analyzepanel' },
+  { id:'time', label:'TIME', panel:'timepanel' },
+];
+const modebar = document.getElementById('modebar');
+modebar.innerHTML = '';
+MODES.forEach(m=>{
+  const b = document.createElement('button');
+  b.className='mbtn'; b.textContent=m.label; b.dataset.id=m.id;
+  b.addEventListener('click', ()=>{
+    setActiveNavBtn(m.id);
+    if(m.id==='earth'){
+      if(STATE.mode==='waves'){
+        closeWavesScreen();
+      } else if(STATE.mode==='underwater'){
+        backToEarth();
+      }
+      return;
+    }
+    if(m.id==='waves'){
+      if(STATE.mode!=='waves'){
+        const loc = STATE.location || { lat:15.5, lon:68.2, name:'India — Arabian Sea' };
+        openWavesScreen(loc.lat, loc.lon, loc.name);
+      }
+      return;
+    }
+    if(m.id==='depth'){
+      if(STATE.mode==='waves'){
+        const loc = (wavesActiveCoords && typeof wavesActiveCoords.lat === 'number')
+          ? wavesActiveCoords
+          : (STATE.location || { lat:15.5, lon:68.2, name:'India — Arabian Sea' });
+        STATE.location = loc;
+        const screen = document.getElementById('wavesscreen');
+        if(screen) screen.classList.remove('show');
+        crossIntoWater();
+        return;
+      }
+      if(STATE.mode==='space'){
+        if(STATE.location) startDive();
+        else showHint('Select an ocean or location first to dive');
+        return;
+      }
+    }
+    if(STATE.mode==='waves'){
+      if(m.panel){
+        const wasOpen = document.getElementById(m.panel).classList.contains('show');
+        ALL_PANELS.forEach(p => { if(p !== m.panel) closePanel(p); });
+        if(!wasOpen) openPanel(m.panel);
+      }
+      return;
+    }
+    if(STATE.mode!=='underwater'){ showHint('Start a dive to access this system'); return; }
+    const wasOpen = m.panel && document.getElementById(m.panel).classList.contains('show');
+    ALL_PANELS.forEach(p => { if(p !== m.panel) closePanel(p); });
+    if(m.panel && !wasOpen){ openPanel(m.panel); }
+    if(m.id==='life' && !STATE.selectedCreature){
+      document.getElementById('creaturebody').innerHTML = `<div class="sub">Click any marine organism in the 3D world to inspect telemetry & biology.</div>`;
+    }
+  });
+  modebar.appendChild(b);
+});
+
+// Brand click to return to Earth
+const brandEl = document.getElementById('brand');
+if(brandEl){
+  brandEl.addEventListener('click', ()=>{
+    if(STATE.mode==='waves') closeWavesScreen();
+    else if(STATE.mode==='underwater') backToEarth();
+  });
+}
+
+// Central UI State Controller (Requirement 54)
+function updateUIForMode(mode){
+  if(mode) STATE.mode = mode;
+  const m = STATE.mode;
+  const isSpace = (m === 'space');
+  const isUnderwater = (m === 'underwater');
+  const isWaves = (m === 'waves');
+
+  const topbar = document.getElementById('topbar');
+  const modebarEl = document.getElementById('modebar');
+  if(topbar) topbar.style.display = 'flex';
+  if(modebarEl) modebarEl.style.display = (isUnderwater || isWaves) ? 'flex' : 'none';
+
+  // Highlight only the single active tab
+  if(isWaves) setActiveNavBtn('waves');
+  else if(isSpace) setActiveNavBtn('earth');
+  else if(isUnderwater) {
+    const openP = document.querySelector('.panel.show');
+    if(!openP) setActiveNavBtn('depth');
+  }
+
+  const hudEl = document.getElementById('hud');
+  const depthBarWrap = document.getElementById('depthbar-wrap');
+  const crosshairEl = document.getElementById('crosshair');
+  const backToEarthEl = document.getElementById('backtoearthbtn');
+  const resetBtnEl = document.getElementById('resetbtn');
+  const rovPadEl = document.getElementById('rovpad');
+  const vertPadEl = document.getElementById('vertpad');
+
+  if(hudEl) hudEl.classList.toggle('show', isUnderwater);
+  if(depthBarWrap) depthBarWrap.classList.toggle('show', isUnderwater);
+  if(crosshairEl) crosshairEl.classList.toggle('show', isUnderwater);
+  if(backToEarthEl) backToEarthEl.classList.toggle('show', isUnderwater);
+  if(resetBtnEl) resetBtnEl.classList.toggle('show', isSpace && !!STATE.ocean);
+
+  const isTouch = (window.innerWidth < 900 || 'ontouchstart' in window);
+  if(rovPadEl) rovPadEl.classList.toggle('show', isUnderwater && isTouch);
+  if(vertPadEl) vertPadEl.classList.toggle('show', isUnderwater && isTouch);
+
+  if(!isUnderwater && !isWaves){
+    ['divecontrolpanel','creaturepanel','currentpanel','analyzepanel','timepanel'].forEach(closePanel);
+    document.querySelectorAll('.mbtn').forEach(x=>x.classList.remove('active'));
+  }
+}
+function updateGlobeOnlyUI(){ updateUIForMode('space'); }
+
+/* ---------------------------------------------------------------
+   21b. DIVE CONTROL & TARGET DEPTH CONTROLLER
+--------------------------------------------------------------- */
+function setTargetDepth(d){
+  d = THREE.MathUtils.clamp(Math.round(d), 0, MAX_DEPTH_M);
+  STATE.rov.targetDepth = d;
+  showHint('ROV autopilot target depth: '+d+'m…');
+}
+document.getElementById('enterdepthbtn').addEventListener('click', ()=>{
+  const v = parseFloat(document.getElementById('targetdepthinput').value);
+  if(STATE.mode!=='underwater'){ showHint('Start a dive first'); return; }
+  if(isNaN(v)){ showHint('Enter a valid depth between 0 and 3000m'); return; }
+  setTargetDepth(v);
+});
+document.getElementById('descendbtn').addEventListener('click', ()=>{ if(STATE.mode==='underwater') setTargetDepth(STATE.depthM+200); });
+document.getElementById('ascendbtn').addEventListener('click', ()=>{ if(STATE.mode==='underwater') setTargetDepth(Math.max(0,STATE.depthM-200)); });
+document.querySelectorAll('.quickdepths button').forEach(b=>{
+  b.addEventListener('click', ()=>{ if(STATE.mode==='underwater') setTargetDepth(parseFloat(b.dataset.d)); });
+});
+
+/* ---------------------------------------------------------------
+   21y. WAVES SCREEN — 3D Hydrodynamic Ocean Simulation Dashboard
+--------------------------------------------------------------- */
+let wavesActiveCoords = null;
+
+function openWavesScreen(lat, lon, name){
+  wavesActiveCoords = { lat, lon, name: name||`${lat.toFixed(1)}°, ${lon.toFixed(1)}°` };
+  STATE.mode = 'waves';
+  updateUIForMode('waves');
+  ALL_PANELS.forEach(closePanel);
+  
+  // Set 3D scene to render real Three.js dynamic ocean surface
+  starGroup.visible = false;
+  earthGroup.visible = false;
+  underGroup.visible = false;
+  oceanGroup.visible = true;
+  scene.background = null;
+  renderer.setClearColor(0x0a283d, 1.0);
+  if(scene.fog){
+    scene.fog.density = 0.0003;
+    scene.fog.color.setHex(0x0a283d);
+  }
+  sun.intensity = 2.0;
+  ambient.intensity = 0.8;
+  controls.enabled = false;
+  
+  camera.position.set(0, 18, 65);
+  camera.lookAt(0, 6, -180);
+  
+  const screen = document.getElementById('wavesscreen');
+  screen.classList.add('show');
+  document.getElementById('wavesloc-name').textContent = wavesActiveCoords.name;
+  document.getElementById('wavesloc-coords').textContent = `${lat.toFixed(2)}°, ${lon.toFixed(2)}°`;
+
+  // Compute and populate all 22 required wave, wind, weather, and severe conditions
+  const mw = computeMarineWeather(lat, lon);
+  
+  // Wave Metrics
+  document.getElementById('w-sig').textContent = mw.waves.sig.toFixed(1) + ' m';
+  document.getElementById('w-max').textContent = mw.waves.max.toFixed(1) + ' m';
+  document.getElementById('w-period').textContent = mw.waves.period.toFixed(1) + ' s';
+  document.getElementById('w-dir').textContent = `${mw.waves.direction}° (${compassDir(mw.waves.direction)})`;
+  document.getElementById('w-speed').textContent = mw.waves.speed.toFixed(1) + ' kn';
+  document.getElementById('w-energy').textContent = mw.waves.energy.toFixed(1) + ' kJ/m²';
+  document.getElementById('w-cond').textContent = mw.waves.condition;
+
+  // Wind Observations
+  document.getElementById('w-windspd').textContent = mw.wind.speed.toFixed(1) + ' km/h';
+  document.getElementById('w-winddir').textContent = `${mw.wind.direction}° (${compassDir(mw.wind.direction)})`;
+  document.getElementById('w-windgust').textContent = mw.wind.gust.toFixed(1) + ' km/h';
+
+  // Meteorology
+  document.getElementById('w-temp').textContent = mw.weather.temperature.toFixed(1) + ' °C';
+  document.getElementById('w-rain').textContent = mw.weather.rainfall.toFixed(1) + ' mm/h';
+  document.getElementById('w-hum').textContent = mw.weather.humidity.toFixed(0) + ' %';
+  document.getElementById('w-vis').textContent = mw.weather.visibility.toFixed(1) + ' km';
+  document.getElementById('w-weathercond').textContent = mw.weather.condition;
+
+  // Severe Weather
+  document.getElementById('w-stormstat').textContent = mw.severe.stormStatus;
+  document.getElementById('w-tornado').textContent = mw.severe.tornadoStatus;
+  document.getElementById('w-stormcat').textContent = mw.severe.category > 0 ? `Category ${mw.severe.category}` : 'None';
+  document.getElementById('w-stormint').textContent = `${mw.severe.intensity} / 100`;
+  document.getElementById('w-movement').textContent = mw.severe.movement;
+  
+  const safeEl = document.getElementById('w-safety');
+  safeEl.textContent = mw.severe.safetyLevel.replace('_', ' ');
+  safeEl.className = 'safety-pill ' + mw.severe.safetyLevel;
+}
+
+function closeWavesScreen(){
+  const screen = document.getElementById('wavesscreen');
+  if(screen) screen.classList.remove('show');
+  
+  // Cleanly restore Earth/space view
+  oceanGroup.visible = false;
+  underGroup.visible = false;
+  earthGroup.visible = true;
+  starGroup.visible = true;
+  
+  // Clear any underwater/ocean fog & background clear colors
+  scene.background = null;
+  renderer.setClearColor(0x020810, 1.0);
+  if(scene.fog) scene.fog.density = 0;
+  
+  // Restore space lighting
+  sun.intensity = 1.35;
+  sun.position.set(600, 250, 400);
+  ambient.intensity = 0.28;
+  ambient.color.setHex(0x0e1c2e);
+  
+  // Restore camera FOV
+  camera.fov = 45;
+  camera.updateProjectionMatrix();
+  
+  // Restore Earth camera position and OrbitControls
+  const targetLoc = (wavesActiveCoords && typeof wavesActiveCoords.lat === 'number') ? wavesActiveCoords : STATE.location;
+  if(targetLoc){
+    const surfacePos = latLonToVec3(targetLoc.lat, targetLoc.lon, EARTH_R);
+    const camPos = surfacePos.clone().normalize().multiplyScalar(EARTH_R * 2.6);
+    camera.position.copy(camPos);
+    camera.lookAt(0, 0, 0);
+  } else {
+    camera.position.set(0, 60, 520);
+    camera.lookAt(0, 0, 0);
+  }
+  
+  controls.target.set(0, 0, 0);
+  controls.enabled = true;
+  controls.update();
+  
+  labelRoot.style.display = '';
+  STATE.mode = 'space';
+  updateUIForMode('space');
+  
+  // Re-project visible labels
+  Object.values(oceanLabelEls).forEach(en => projectLabel(en, earthGroup));
+  locLabelEls.forEach(en => projectLabel(en, earthGroup));
+  stormLabelEls.forEach(en => projectLabel(en, earthGroup));
+  
+  if(STATE.ocean){
+    document.getElementById('resetbtn').classList.add('show');
+    buildLocLabels(STATE.ocean);
+  }
+}
+document.getElementById('wavesbackbtn').addEventListener('click', closeWavesScreen);
+
+// Prevent 3D scene controls from capturing scroll events on the waves details panel
+const wavesDataPanelEl = document.getElementById('wavesdatapanel');
+if(wavesDataPanelEl){
+  ['wheel', 'touchmove'].forEach(evt => {
+    wavesDataPanelEl.addEventListener(evt, e => e.stopPropagation(), { passive: true });
+  });
+  ['mousedown', 'pointerdown', 'touchstart'].forEach(evt => {
+    wavesDataPanelEl.addEventListener(evt, e => e.stopPropagation());
+  });
+}
+
+function showHint(msg){
+  const h = document.getElementById('hint');
+  h.textContent = msg; h.classList.add('show');
+  clearTimeout(showHint._t);
+  showHint._t = setTimeout(()=>h.classList.remove('show'), 5000);
+}
+
+/* ---------------------------------------------------------------
+   22. CURRENT SIMULATION CONTROLS
+--------------------------------------------------------------- */
+const curToggle = document.getElementById('currenttoggle');
+curToggle.addEventListener('click', ()=>{
+  STATE.current.active = !STATE.current.active;
+  curToggle.classList.toggle('on', STATE.current.active);
+  curToggle.textContent = STATE.current.active ? 'Deactivate Current' : 'Activate Current';
+  updateCurrentVec();
+  if(STATE.current.active) aiPush('ai', `Current activated: ${STATE.current.speed.toFixed(1)} kn flowing toward ${document.getElementById('dccurdir').textContent||''}. Particles and marine organisms are responding to flow direction.`);
+});
+document.getElementById('curspeed').addEventListener('input', e=>{
+  STATE.current.speed = parseFloat(e.target.value);
+  document.getElementById('curspeedval').textContent = STATE.current.speed.toFixed(2)+' kn';
+  updateCurrentVec();
+});
+document.getElementById('curdir').addEventListener('input', e=>{
+  STATE.current.dirDeg = parseFloat(e.target.value);
+  document.getElementById('curdirval').textContent = STATE.current.dirDeg.toFixed(0)+'°';
+  updateCurrentVec();
+});
+
+/* ---------------------------------------------------------------
+   23. DEPTH PROFILE GRAPH (Analyze panel)
+--------------------------------------------------------------- */
+const dg = document.getElementById('depthgraph');
+const dgCtx = dg.getContext('2d');
+function drawDepthGraph(){
+  if(!document.getElementById('analyzepanel').classList.contains('show')) return;
+  const W=dg.width,H=dg.height; dgCtx.clearRect(0,0,W,H);
+  dgCtx.strokeStyle='rgba(62,230,255,0.12)'; dgCtx.lineWidth=1;
+  for(let i=0;i<=4;i++){ const y=H/4*i; dgCtx.beginPath(); dgCtx.moveTo(0,y); dgCtx.lineTo(W,y); dgCtx.stroke(); }
+  const series = [
+    { key:'temp', color:'#ff9d5c', max:30 },
+    { key:'oxy',  color:'#3ee6ff', max:9 },
+    { key:'sal',  color:'#0ee6b7', max:36 },
+  ];
+  const loc = STATE.location||{lat:0};
+  series.forEach(s=>{
+    dgCtx.beginPath(); dgCtx.strokeStyle=s.color; dgCtx.lineWidth=2;
+    for(let x=0;x<=W;x+=4){
+      const depth = x/W*MAX_DEPTH_M;
+      const d = computeData(depth, loc.lat, STATE.time.year);
+      const val = d[s.key];
+      const y = H - (val/s.max)*H;
+      if(x===0) dgCtx.moveTo(x,y); else dgCtx.lineTo(x,y);
+    }
+    dgCtx.stroke();
+  });
+  const mx = (STATE.depthM/MAX_DEPTH_M)*W;
+  dgCtx.strokeStyle='#ffffff'; dgCtx.lineWidth=1.5; dgCtx.setLineDash([3,3]);
+  dgCtx.beginPath(); dgCtx.moveTo(mx,0); dgCtx.lineTo(mx,H); dgCtx.stroke(); dgCtx.setLineDash([]);
+  dgCtx.fillStyle='#ffffff'; dgCtx.font='9px sans-serif';
+  dgCtx.fillText(STATE.depthM.toFixed(0)+'m', Math.min(W-30,mx+4), 12);
+}
+dg.addEventListener('click', e=>{
+  const rect = dg.getBoundingClientRect();
+  const x = (e.clientX-rect.left)/rect.width;
+  const targetDepth = THREE.MathUtils.clamp(x*MAX_DEPTH_M,0,MAX_DEPTH_M);
+  if(STATE.mode==='underwater'){
+    setTargetDepth(targetDepth);
+  }
+});
+
+/* ---------------------------------------------------------------
+   24. TIME EXPLORER & HISTORICAL SIMULATION
+--------------------------------------------------------------- */
+const yearSlider = document.getElementById('yearslider');
+const yearLabel = document.getElementById('yearlabel');
+yearSlider.addEventListener('input', e=>{
+  STATE.time.year = parseInt(e.target.value);
+  yearLabel.textContent = STATE.time.year;
+});
+document.getElementById('comparebtn').addEventListener('click', ()=>{
+  const box = document.getElementById('comparebody');
+  const loc = STATE.location||{lat:0};
+  const now = computeData(STATE.depthM, loc.lat, 2026);
+  const then = computeData(STATE.depthM, loc.lat, STATE.time.year);
+  const dT = (now.temp-then.temp);
+  box.style.display='block';
+  box.innerHTML = `<div class="tag demo" style="margin-bottom:6px;">DEMO — simulated trend, not observed data</div>
+    Temp ${STATE.time.year}: <b style="color:#3ee6ff">${then.temp.toFixed(1)}°C</b> → 2026: <b style="color:#3ee6ff">${now.temp.toFixed(1)}°C</b><br>
+    Change: <b style="color:${dT>=0?'#ff9d5c':'#3ee6ff'}">${dT>=0?'+':''}${dT.toFixed(2)}°C</b> at ${STATE.depthM.toFixed(0)}m`;
+});
+
+document.getElementById('traveltimebtn').addEventListener('click', ()=>{
+  const newYear = parseInt(yearSlider.value);
+  document.getElementById('timetravelnote').style.display='block';
+  STATE.time.year = newYear;
+  showHint('Simulated temporal state updated to '+newYear);
+  closePanel('timepanel');
+});
+
+/* ---------------------------------------------------------------
+   25. CREATURE DATABASE & RAYCAST INSPECTOR (9 Real Species)
+--------------------------------------------------------------- */
+const CREATURE_INFO = {
+  blue_tang:   { name:'Blue Tang', latin:'Paracanthurus hepatus', range:'0–60m', habitat:'Shallow coral reefs & reef crests', status:'Simulated PBR Model' },
+  yellow_tang: { name:'Yellow Tang', latin:'Zebrasoma flavescens', range:'2–45m', habitat:'Subtropical reef shallows & lagoons', status:'Simulated PBR Model' },
+  clownfish:   { name:'Ocellaris Clownfish', latin:'Amphiprion ocellaris', range:'1–25m', habitat:'Sea anemones, reef shelters', status:'Simulated PBR Model' },
+  mackerel:    { name:'Schooling Mackerel', latin:'Scomber scombrus', range:'20–250m', habitat:'Pelagic open ocean, epipelagic flocking', status:'Simulated PBR Model' },
+  tuna:        { name:'Yellowfin Tuna', latin:'Thunnus albacares', range:'50–400m', habitat:'Fast pelagic open ocean predator', status:'Simulated PBR Model' },
+  turtle:      { name:'Green Sea Turtle', latin:'Chelonia mydas', range:'0–110m', habitat:'Coastal reefs & pelagic feeding grounds', status:'Simulated PBR Model' },
+  jellyfish:   { name:'Moon Jellyfish', latin:'Aurelia aurita', range:'0–900m', habitat:'Current-driven drifting, bathypelagic glow', status:'Simulated PBR Model' },
+  shark:       { name:'Blacktip Reef Shark', latin:'Carcharhinus melanopterus', range:'10–300m', habitat:'Reef slopes & open ocean shelf', status:'Simulated PBR Model' },
+  angler:      { name:'Humpback Anglerfish', latin:'Melanocetus johnsonii', range:'800–3,000m', habitat:'Abyssal midnight zone, glowing lure', status:'Simulated PBR Model' },
+};
+
+const raycaster = new THREE.Raycaster();
+const mouseNDC = new THREE.Vector2();
+
+renderer.domElement.addEventListener('pointerdown', e=>{
+  if(STATE.mode!=='underwater') return;
+  mouseNDC.x = (e.clientX/window.innerWidth)*2-1;
+  mouseNDC.y = -(e.clientY/window.innerHeight)*2+1;
+  raycaster.setFromCamera(mouseNDC, camera);
+
+  const targets = [];
+  Object.values(marineLife).forEach(grp => {
+    grp.traverse(child => { if(child.isMesh) targets.push(child); });
+  });
+
+  const hits = raycaster.intersectObjects(targets, true);
+  if(hits.length){
+    let obj = hits[0].object;
+    let key = 'mackerel';
+    while(obj && obj !== scene){
+      if(obj.userData && obj.userData.species){
+        key = obj.userData.species;
+        break;
+      }
+      if(obj.parent === marineLife.tangGroup) { key = (obj.userData && obj.userData.species) || 'blue_tang'; break; }
+      if(obj.parent === marineLife.clownGroup) { key = 'clownfish'; break; }
+      if(obj.parent === marineLife.mackerelGroup) { key = 'mackerel'; break; }
+      if(obj.parent === marineLife.tunaGroup) { key = 'tuna'; break; }
+      if(obj.parent === marineLife.turtleGroup) { key = 'turtle'; break; }
+      if(obj.parent === marineLife.jellyGroup) { key = 'jellyfish'; break; }
+      if(obj.parent === marineLife.sharkGroup) { key = 'shark'; break; }
+      if(obj.parent === marineLife.anglerGroup) { key = 'angler'; break; }
+      obj = obj.parent;
+    }
+    showCreature(key);
+  }
+});
+
+function showCreature(key){
+  const c = CREATURE_INFO[key] || CREATURE_INFO.mackerel;
+  STATE.selectedCreature = key;
+  document.getElementById('creaturebody').innerHTML = `
+    <div style="font-size:15px;color:#3ee6ff;font-weight:600;">${c.name}</div>
+    <div style="font-style:italic;color:var(--text-dim);font-size:11px;margin-bottom:6px;">${c.latin}</div>
+    <div class="locrow"><span>Depth Range</span><b>${c.range}</b></div>
+    <div class="locrow"><span>Habitat</span><b style="text-align:right">${c.habitat}</b></div>
+    <div class="locrow"><span>Observation</span><b><span class="tag demo">${c.status}</span></b></div>
+  `;
+  document.querySelectorAll('.mbtn').forEach(x=>x.classList.remove('active'));
+  const lifeBtn = document.querySelector('.mbtn[data-id="life"]');
+  if(lifeBtn) lifeBtn.classList.add('active');
+  ['currentpanel','analyzepanel','timepanel','aipanel'].forEach(closePanel);
+  openPanel('creaturepanel');
+}
+
+/* ---------------------------------------------------------------
+   26. AI ASSISTANT (Lyzr AI backend proxy integration & simulation controller)
+--------------------------------------------------------------- */
+const aiIconEl = document.getElementById('aiicon');
+if(aiIconEl){
+  aiIconEl.addEventListener('click', ()=>{
+    const aip = document.getElementById('aipanel');
+    if(aip.classList.contains('show')) closePanel('aipanel');
+    else openPanel('aipanel');
+  });
+}
+
+const ailog = document.getElementById('ailog');
+function aiPush(role, text){
+  const d = document.createElement('div');
+  d.className = 'msg ' + (role === 'user' ? 'user' : 'ai');
+  d.textContent = text;
+  ailog.appendChild(d);
+  ailog.scrollTop = ailog.scrollHeight;
+}
+
+async function sendAI(){
+  const inp = document.getElementById('aiinput');
+  const userMsg = inp.value.trim();
+  if(!userMsg) return;
+  inp.value = '';
+  aiPush('user', userMsg);
+
+  const replyText = aiProcessCopilot(userMsg);
+  aiPush('ai', replyText);
+}
+
+function aiProcessCopilot(userMsg){
+  const loc = STATE.location || { name:'Indian Ocean / Global', lat:15, lon:68 };
+  const d = computeData(STATE.depthM, loc.lat, STATE.time.year);
+  const ql = userMsg.toLowerCase().trim();
+
+  const headingDeg = ((-STATE.rov.heading * 180 / Math.PI) % 360 + 360) % 360;
+  const directions = ['North', 'NE', 'East', 'SE', 'South', 'SW', 'West', 'NW'];
+  const cardinal = directions[Math.round(headingDeg / 45) % 8];
+
+  function getDepthTier(depth){
+    if(depth < 200) return 'Epipelagic (Sunlit Zone, 0–200m)';
+    if(depth < 1000) return 'Mesopelagic (Twilight Zone, 200–1,000m)';
+    if(depth < 4000) return 'Bathypelagic (Midnight Zone, 1,000–4,000m)';
+    if(depth < 6000) return 'Abyssopelagic (Abyss, 4,000–6,000m)';
+    return 'Hadalpelagic (Trenches, 6,000m+)';
+  }
+
+  function getExpectedLife(depth){
+    if(depth < 100) return 'Abundant reef and upper pelagic species: Blue Tangs, Yellow Tangs, Clownfish, Schooling Mackerel, Sea Turtles, and occasional Reef Sharks.';
+    if(depth < 500) return 'Mesopelagic species: Pelagic Tuna, Schooling Mackerel, current-drifting Moon Jellyfish, and occasional sharks.';
+    if(depth < 1000) return 'Sparse twilight life: Bioluminescent Moon Jellyfish and sparse specialized midwater drifters.';
+    return 'Abyssal midnight specialists: Bioluminescent Humpback Anglerfish and deep-sea organisms adapted to extreme hydrostatic pressure.';
+  }
+
+  // -------------------------------------------------------------
+  // 1. MULTI-STEP EXPLORATION COMMANDS
+  // -------------------------------------------------------------
+  const multiDepthLifeMatch = ql.match(/(?:take|dive|descend|go|bring).*?(\d+)\s*(?:m|meter|meters).*?(?:what lives|what.*expect|what.*see|marine life|animals|creatures|fish)/);
+  if(multiDepthLifeMatch){
+    const targetDepth = parseInt(multiDepthLifeMatch[1]);
+    if(STATE.mode === 'underwater') setTargetDepth(targetDepth);
+    return `Autopilot engaged: Descending to ${targetDepth}m. At ${targetDepth}m (${getDepthTier(targetDepth)}), you can expect: ${getExpectedLife(targetDepth)}`;
+  }
+
+  const multiDepthStatusMatch = ql.match(/(?:take|dive|descend|go|bring).*?(\d+)\s*(?:m|meter|meters).*?(?:status|report|analyze|telemetry|conditions)/);
+  if(multiDepthStatusMatch){
+    const targetDepth = parseInt(multiDepthStatusMatch[1]);
+    if(STATE.mode === 'underwater') setTargetDepth(targetDepth);
+    const targetPres = (1.0 + targetDepth / 10.0).toFixed(0);
+    return `Autopilot engaged: Descending to ${targetDepth}m. Target environment: ${getDepthTier(targetDepth)}, expected pressure ~${targetPres} atm with near-total sunlight attenuation. Telemetry logging active.`;
+  }
+
+  if(/(?:surface|0\s*m).*?(?:earth|globe|orbit)|(?:earth|globe|orbit).*?(?:surface|0\s*m)/.test(ql)){
+    if(STATE.mode === 'underwater'){
+      backToEarth();
+      return `Initiating full ascent sequence and returning to orbital Earth view.`;
+    } else {
+      updateUIForMode('space');
+      return `Returning to orbital Earth view.`;
+    }
+  }
+
+  const multiDepthAnalyzeMatch = ql.match(/(?:take|dive|descend|go|bring).*?(\d+)\s*(?:m|meter|meters).*?(?:open analyze|show analyze|show data|sensors)/);
+  if(multiDepthAnalyzeMatch){
+    const targetDepth = parseInt(multiDepthAnalyzeMatch[1]);
+    if(STATE.mode === 'underwater'){
+      setTargetDepth(targetDepth);
+      ALL_PANELS.forEach(closePanel);
+      openPanel('analyzepanel');
+      setActiveNavBtn('btn-analyze');
+      return `Descending to ${targetDepth}m and displaying real-time sensor analytics panel.`;
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 2. ROV MOTION & MANEUVERS
+  // -------------------------------------------------------------
+  const directDepthMatch = ql.match(/(?:descend|dive|go|take me|bring me|set depth|head)\s+(?:down\s+)?(?:to\s+)?(\d+)\s*(?:m|meter|meters)?/);
+  if(directDepthMatch && !/turn|rotate/.test(ql)){
+    const depthVal = parseInt(directDepthMatch[1]);
+    if(STATE.mode === 'underwater'){
+      setTargetDepth(depthVal);
+      return `Autopilot engaged: Descending to ${depthVal}m (${getDepthTier(depthVal)}). Telemetry adjusting in real time.`;
+    } else {
+      return `Target depth set to ${depthVal}m. Start a dive on Earth to begin exploration.`;
+    }
+  }
+
+  const ascendDistMatch = ql.match(/(?:ascend|go up|climb|rise|bring up)\s+(?:by\s+)?(\d+)\s*(?:m|meter|meters)?/);
+  if(ascendDistMatch){
+    const dist = parseInt(ascendDistMatch[1]);
+    if(STATE.mode === 'underwater'){
+      const target = Math.max(0, STATE.depthM - dist);
+      setTargetDepth(target);
+      return `Ascending ${dist}m to target depth ${target.toFixed(0)}m.`;
+    }
+  }
+
+  if(/go deeper|dive deeper|descend further|take us down|take me down|head deeper/.test(ql)){
+    if(STATE.mode === 'underwater'){
+      const target = Math.min(MAX_DEPTH_M, STATE.depthM + 50);
+      setTargetDepth(target);
+      return `Descending 50m deeper to ${target.toFixed(0)}m.`;
+    }
+  }
+
+  if(/come back up|go back up|ascend|bring me up|rise up/.test(ql) && !/surface/.test(ql)){
+    if(STATE.mode === 'underwater'){
+      const target = Math.max(0, STATE.depthM - 50);
+      setTargetDepth(target);
+      return `Ascending 50m upward to ${target.toFixed(0)}m.`;
+    }
+  }
+
+  if(/return to (?:the )?surface|go to surface|surface the rov|take me to surface|bring me back to 0|let'?s surface|surface/.test(ql)){
+    if(STATE.mode === 'underwater'){
+      setTargetDepth(0);
+      return `Ascending to the ocean surface (0m, ~1.0 atm). Vertical thrusters active.`;
+    }
+  }
+
+  if(/move forward|go forward|thrust ahead|drive forward|full ahead|forward/.test(ql)){
+    if(STATE.mode === 'underwater'){
+      STATE.keys['KeyW'] = true;
+      setTimeout(()=>{ STATE.keys['KeyW'] = false; }, 2500);
+      return `ROV thrusters engaged: Forward propulsion active for 2.5s.`;
+    }
+    return `Start a dive to pilot the ROV.`;
+  }
+
+  if(/move backward|go backward|reverse|back up|drive back|backward/.test(ql)){
+    if(STATE.mode === 'underwater'){
+      STATE.keys['KeyS'] = true;
+      setTimeout(()=>{ STATE.keys['KeyS'] = false; }, 2500);
+      return `ROV thrusters engaged: Reverse propulsion active for 2.5s.`;
+    }
+    return `Start a dive to pilot the ROV.`;
+  }
+
+  if(/turn 90 degrees? right|rotate 90 degrees? right/.test(ql)){
+    if(STATE.mode === 'underwater'){
+      STATE.rov.heading -= Math.PI / 2;
+      return `ROV heading adjusted 90° clockwise. New heading: ${(((-STATE.rov.heading * 180 / Math.PI) % 360 + 360) % 360).toFixed(0)}°.`;
+    }
+  }
+  if(/turn 90 degrees? left|rotate 90 degrees? left/.test(ql)){
+    if(STATE.mode === 'underwater'){
+      STATE.rov.heading += Math.PI / 2;
+      return `ROV heading adjusted 90° counter-clockwise. New heading: ${(((-STATE.rov.heading * 180 / Math.PI) % 360 + 360) % 360).toFixed(0)}°.`;
+    }
+  }
+
+  if(/turn left|steer left|yaw left|rotate left/.test(ql)){
+    if(STATE.mode === 'underwater'){
+      STATE.keys['KeyA'] = true;
+      setTimeout(()=>{ STATE.keys['KeyA'] = false; }, 1800);
+      return `Steering left. ROV yawing counter-clockwise.`;
+    }
+    return `Start a dive to pilot the ROV.`;
+  }
+  if(/turn right|steer right|yaw right|rotate right/.test(ql)){
+    if(STATE.mode === 'underwater'){
+      STATE.keys['KeyD'] = true;
+      setTimeout(()=>{ STATE.keys['KeyD'] = false; }, 1800);
+      return `Steering right. ROV yawing clockwise.`;
+    }
+    return `Start a dive to pilot the ROV.`;
+  }
+
+  if(/stop|hold position|halt|brake|freeze|stay here/.test(ql)){
+    if(STATE.mode === 'underwater'){
+      STATE.rov.targetDepth = null;
+      rovVel.set(0, 0, 0);
+      STATE.keys = {};
+      return `ROV stationary. Thrusters idling and holding position at ${STATE.depthM.toFixed(0)}m.`;
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 3. NAVIGATION BETWEEN APPLICATION SCREENS
+  // -------------------------------------------------------------
+  if(/take me to earth|open (?:the )?earth|show (?:the )?earth|back to earth|return to earth|orbit view|space view/.test(ql)){
+    if(STATE.mode === 'underwater'){
+      backToEarth();
+      return `Returning to orbital Earth view.`;
+    } else {
+      updateUIForMode('space');
+      return `Switched to Earth view. Select any dive location or storm marker on the globe.`;
+    }
+  }
+
+  if(/open waves|show waves|show me (?:the )?waves|wave dashboard|wave forecast|sea state/.test(ql)){
+    openWavesScreen(loc.lat, loc.lon, loc.name);
+    return `Opening high-resolution Waves & Marine Weather dashboard for ${loc.name}.`;
+  }
+
+  if(/open marine life|show marine life|show me marine life|creature database|inspect marine life/.test(ql)){
+    ALL_PANELS.forEach(closePanel);
+    openPanel('creaturepanel');
+    setActiveNavBtn('btn-life');
+    return `Opening Marine Life biological database.`;
+  }
+
+  if(/open analyze|go to analyze|show analyze|ocean data|sensor panel|sensor telemetry/.test(ql)){
+    ALL_PANELS.forEach(closePanel);
+    openPanel('analyzepanel');
+    setActiveNavBtn('btn-analyze');
+    return `Opening Ocean Data & Sensor Analysis panel.`;
+  }
+
+  if(/take me back to depth|return to (?:the )?underwater|open depth|dive view/.test(ql)){
+    if(STATE.mode === 'underwater'){
+      ALL_PANELS.forEach(closePanel);
+      openPanel('divecontrolpanel');
+      setActiveNavBtn('btn-depth');
+      return `Switched to Depth Control panel at ${STATE.depthM.toFixed(0)}m.`;
+    } else {
+      startDive();
+      return `Initiating continuous dive voyage from orbit into the ocean!`;
+    }
+  }
+
+  if(/open current|show current|current flow/.test(ql)){
+    STATE.current.active = true;
+    updateCurrentVec();
+    ALL_PANELS.forEach(closePanel);
+    openPanel('currentpanel');
+    return `Current telemetry active: ${STATE.current.speed.toFixed(1)} kn flowing ${document.getElementById('dccurdir').textContent||'East'}.`;
+  }
+
+  if(/storm|cyclone|hurricane|typhoon/.test(ql)){
+    const ns = nearestStorm(loc.lat, loc.lon);
+    if(ns.storm){
+      return `Nearest active storm: ${ns.storm.name} (${ns.storm.type}, Category ${ns.storm.category}) located at ${ns.storm.latitude}°, ${ns.storm.longitude}° with sustained winds of ${ns.storm.windSpeed} km/h and wave heights of ${ns.storm.waveHeight}m.`;
+    }
+    return `No severe storm active in your immediate vicinity. Environmental conditions are stable.`;
+  }
+
+  // -------------------------------------------------------------
+  // 4. SCIENTIFIC OCEANOGRAPHY EXPLANATIONS
+  // -------------------------------------------------------------
+  if(/why.*pressure.*increase|why.*more pressure|how.*pressure.*work/.test(ql)){
+    return `Pressure increases linearly with depth because seawater has mass. Every 10 meters of water column adds approximately 1 atmosphere (~1.013 bar / 14.7 psi) of hydrostatic force on top of the surface atmospheric pressure.`;
+  }
+
+  if(/why.*dark|why.*sunlight.*weak|why.*light.*drop|why.*attenuat/.test(ql)){
+    return `Seawater selectively absorbs and scatters solar photons. Red and infrared wavelengths are absorbed within the first 10–30 meters, while high-energy blue-green wavelengths penetrate deepest. By 200m depth, less than 1% of sunlight remains.`;
+  }
+
+  if(/what happens to temperature|how.*temp.*change.*depth|why.*cold.*deep|thermocline/.test(ql)){
+    return `Solar radiation warms only the surface mixed layer. Below this lies the thermocline (typically 100–1,000m), where water temperature plummets rapidly before stabilizing at a near-freezing 1°C to 4°C in the deep ocean.`;
+  }
+
+  if(/difference between salinity and temp|salinity.*temp/.test(ql)){
+    return `Temperature represents thermal kinetic energy (°C), whereas salinity measures dissolved mineral ions (PSU or g/kg). Together, they govern seawater density: colder, saltier water is denser, sinking to power the global thermohaline conveyor belt.`;
+  }
+
+  if(/why.*deep.*animal.*look different|why.*creatures.*strange|why.*bioluminescen/.test(ql)){
+    return `Deep-sea fauna evolve under crushing hydrostatic pressure, freezing cold, and total darkness. They adapt with flexible bones, expandable stomachs, ultra-sensitive photophores (bioluminescence), and high concentrations of piezolytes to maintain cellular integrity.`;
+  }
+
+  if(/what lives at 1000|what is (?:the )?bathypelagic|bathypelagic zone/.test(ql)){
+    return `The bathypelagic zone (1,000–4,000m), or midnight zone, receives zero sunlight. Inhabitants include specialized predators like anglerfish, giant squid, gulper eels, and lanternfish adapted to high ambient pressures (~101+ atm).`;
+  }
+
+  if(/what is (?:the )?mesopelagic|mesopelagic zone|twilight zone/.test(ql)){
+    return `The mesopelagic zone (200–1,000m), or twilight zone, is dimly lit. Sunlight is too faint for photosynthesis but sufficient for vision. It hosts the largest animal migration on Earth (the Diel Vertical Migration) every night.`;
+  }
+
+  if(/abyssal zone|abyssopelagic|hadal/.test(ql)){
+    return `The abyssopelagic (4,000–6,000m) and hadal zones (trenches >6,000m) feature near-freezing water, pressures exceeding 600–1,100 atm, and unique ecosystems supported by hydrothermal vents and sinking marine snow.`;
+  }
+
+  // -------------------------------------------------------------
+  // 5. CURRENT TELEMETRY INQUIRIES
+  // -------------------------------------------------------------
+  if(/temp|cold|warm|how cold|how warm/.test(ql)){
+    return `Simulated water temperature at ${STATE.depthM.toFixed(0)}m is ${d.temp.toFixed(1)}°C. Temperature decreases across the thermocline as depth increases.`;
+  }
+
+  if(/salin|salt|how salty|is the water salty/.test(ql)){
+    return `Simulated salinity at this depth is ${d.sal.toFixed(1)} PSU (practical salinity units). Surface evaporation and polar melt create regional salinity gradients.`;
+  }
+
+  if(/oxygen|o2|dissolved oxygen|how much oxygen/.test(ql)){
+    return `Dissolved oxygen is approximately ${d.oxy.toFixed(1)} mg/L at ${STATE.depthM.toFixed(0)}m. Oxygen is highest near the surface due to photosynthesis and atmospheric mixing.`;
+  }
+
+  if(/pres|pressure|how many atm|atmospheres|bar/.test(ql)){
+    return `Ambient hydrostatic pressure at ${STATE.depthM.toFixed(0)}m is approximately ${d.pres.toFixed(0)} atm (~${(d.pres * 1.013).toFixed(1)} bar / ${(d.pres * 14.696).toFixed(0)} psi).`;
+  }
+
+  if(/depth|how deep|what depth/.test(ql)){
+    return `You are currently at ${STATE.depthM.toFixed(0)}m depth in the ${getDepthTier(STATE.depthM)} near ${loc.name}.`;
+  }
+
+  if(/heading|bearing|compass|direction/.test(ql)){
+    return `Current ROV heading is ${headingDeg.toFixed(0)}° (${cardinal}).`;
+  }
+
+  if(/speed|velocity|how fast/.test(ql)){
+    const spdKnots = (STATE.rov.speed * 1.94384).toFixed(1);
+    return `Current ROV cruising speed is ${STATE.rov.speed.toFixed(2)} m/s (${spdKnots} kn). Motion state: ${STATE.rov.moveState || 'CRUISING'}.`;
+  }
+
+  // -------------------------------------------------------------
+  // 6. LOCATION, CONTEXT & SITUATION REPORTS
+  // -------------------------------------------------------------
+  if(/what am i looking at|what is happening here|what kind of environment|tell me about this location|status|situation report|sitrep|quick status/.test(ql)){
+    return `Status Report for ${loc.name} (${loc.lat.toFixed(1)}°, ${loc.lon.toFixed(1)}°): Current depth is ${STATE.depthM.toFixed(0)}m in the ${getDepthTier(STATE.depthM)}. Temperature is ${d.temp.toFixed(1)}°C, pressure is ${d.pres.toFixed(0)} atm, and salinity is ${d.sal.toFixed(1)} PSU. ${getExpectedLife(STATE.depthM)}`;
+  }
+
+  if(/analyze|analysis|evaluate conditions|good environment for shallow/.test(ql)){
+    const isShallowFriendly = STATE.depthM < 80;
+    return `Environmental Analysis (${STATE.depthM.toFixed(0)}m depth, ${d.pres.toFixed(0)} atm, ${d.temp.toFixed(1)}°C): ${isShallowFriendly ? 'Conditions are optimal for shallow photosynthetic and coral reef species with ample sunlight.' : 'High pressure and light attenuation make this environment suited for pelagic and deep-water organisms rather than shallow reef fish.'}`;
+  }
+
+  // -------------------------------------------------------------
+  // 7. MARINE LIFE INQUIRIES
+  // -------------------------------------------------------------
+  if(/fish|animal|creature|life|shark|turtle|jelly|angler|what lives here/.test(ql)){
+    return `At ${STATE.depthM.toFixed(0)}m (${getDepthTier(STATE.depthM)}), the ecosystem consists of: ${getExpectedLife(STATE.depthM)} Click any 3D creature to inspect biological specifications.`;
+  }
+
+  if(/where|location|coordinates|site/.test(ql)){
+    return `Current dive location: ${loc.name} at coordinates ${loc.lat.toFixed(2)}°N, ${loc.lon.toFixed(2)}°E.`;
+  }
+
+  // Default Scientific Copilot Summary
+  return `Copilot Telemetry at ${loc.name} (${STATE.depthM.toFixed(0)}m): Temp ${d.temp.toFixed(1)}°C · Salinity ${d.sal.toFixed(1)} PSU · O₂ ${d.oxy.toFixed(1)} mg/L · Pressure ${d.pres.toFixed(0)} atm. You can ask me scientific questions, telemetry inquiries, navigation commands, or pilot the ROV!`;
+}
+
+function aiAnswer(q){
+  return aiProcessCopilot(q);
+}
+
+document.getElementById('aisend').addEventListener('click', sendAI);
+document.getElementById('aiinput').addEventListener('keydown', e=>{ if(e.key==='Enter') sendAI(); });
+document.querySelectorAll('.aisug').forEach(el=>{
+  el.addEventListener('click', ()=>{
+    const q = el.textContent.replace(/^»\s*/, '');
+    document.getElementById('aiinput').value = q;
+    sendAI();
+  });
+});
+
+/* ---------------------------------------------------------------
+   27. DIVE SUMMARY
+--------------------------------------------------------------- */
+window.generateDiveSummary = function(){
+  const loc = STATE.location || { name:'Global Ocean', lat:0 };
+  const d = computeData(STATE.depthM, loc.lat, STATE.time.year);
+  document.getElementById('summarybody').innerHTML = `
+    <div class="locrow"><span>Location</span><b>${loc.name}</b></div>
+    <div class="locrow"><span>Max Depth Reached</span><b>${STATE.depthM.toFixed(0)} m</b></div>
+    <div class="locrow"><span>Temperature</span><b>${d.temp.toFixed(1)} °C</b></div>
+    <div class="locrow"><span>Salinity</span><b>${d.sal.toFixed(1)} PSU</b></div>
+    <div class="locrow"><span>Oxygen</span><b>${d.oxy.toFixed(1)} mg/L</b></div>
+    <div class="locrow"><span>Current</span><b>${STATE.current.active?STATE.current.speed.toFixed(1)+' kn':'calm'}</b></div>
+    <div class="locrow"><span>Species Logged</span><b>${STATE.selectedCreature?CREATURE_INFO[STATE.selectedCreature].name:'—'}</b></div>
+    <div class="sub" style="margin-top:8px;">All environmental values are simulated demo data.</div>
+  `;
+  openPanel('summarypanel');
+};
+
+/* ---------------------------------------------------------------
+   28. PARTICLE DRIFT (Marine snow suspended in ocean volume)
+--------------------------------------------------------------- */
+function updateParticles(dt){
+  const posAttr = pGeo.attributes.position;
+  const arr = posAttr.array;
+  const relX = -rovVel.x * dt * 1.4;
+  const relY = -rovVel.y * dt * 1.4;
+  const relZ = -rovVel.z * dt * 1.4;
+  for(let i=0; i<PCOUNT; i++){
+    let x=arr[i*3], y=arr[i*3+1], z=arr[i*3+2];
+    y -= dt * 0.12;
+    x += STATE.currentVX * dt * 2.0 + relX;
+    y += relY;
+    z += STATE.currentVZ * dt * 2.0 + relZ;
+    if(y < -FIELD*0.35) y = FIELD*0.35;
+    if(y > FIELD*0.35) y = -FIELD*0.35;
+    if(x > FIELD/2) x = -FIELD/2; if(x < -FIELD/2) x = FIELD/2;
+    if(z > FIELD/2) z = -FIELD/2; if(z < -FIELD/2) z = FIELD/2;
+    arr[i*3]=x; arr[i*3+1]=y; arr[i*3+2]=z;
+  }
+  posAttr.needsUpdate = true;
+
+  const speedRatio = THREE.MathUtils.clamp((STATE.rov ? STATE.rov.speed : 0) / ROV_MAX_SPEED, 0, 1);
+  pMat.size = THREE.MathUtils.lerp(pMat.size, 0.16 + speedRatio * 0.12, dt * 4);
+  pMat.opacity = THREE.MathUtils.lerp(pMat.opacity, 0.38 + speedRatio * 0.28, dt * 4);
+}
+
+/* ---------------------------------------------------------------
+   29. MAIN ANIMATION LOOP
+--------------------------------------------------------------- */
+updateCurrentVec();
+updateUIForMode('space');
+let lastT = performance.now();
+
+function animate(){
+  requestAnimationFrame(animate);
+  const now = performance.now();
+  const dt = Math.min(0.05, (now - lastT) / 1000);
+  lastT = now;
+  const t = now / 1000;
+
+  if(cloudMesh) cloudMesh.rotation.y += dt * 0.002;
+  if(earthGroup.visible){
+    controls.update();
+    Object.values(oceanLabelEls).forEach(en => projectLabel(en, earthGroup));
+    locLabelEls.forEach(en => projectLabel(en, earthGroup));
+    stormLabelEls.forEach(en => projectLabel(en, earthGroup));
+  }
+
+  if(oceanGroup.visible){
+    waterUniforms.uTime.value = t;
+    updateOceanSurface(t);
+  }
+
+  if(underGroup.visible){
+    updateROV(dt);
+    updateMarineEcosystem(dt, t);
+    updateThrusterBubbles(dt);
+    updateFlowArrows(dt);
+    updateParticles(dt);
+    updateKelp(t);
+    updateDepthEnvironment();
+    updateHUD();
+    rayGroup.children.forEach(r=>{
+      r.position.x = r.userData.baseX + Math.sin(t*0.3 + r.userData.phase)*3;
+      r.rotation.y += dt * 0.04;
+    });
+  }
+
+  renderer.render(scene, camera);
+}
+animate();
+
+})();
+
+</script>
+</body>
+</html>
